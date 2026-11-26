@@ -135,17 +135,28 @@ uv run ruff format .             # format
 
 ### 🔐 Secret scanning with TruffleHog
 
-Git hooks scan every commit **and** push with [TruffleHog](https://github.com/trufflesecurity/trufflehog), so an
-API key can't slip into GitHub by accident. CI runs the same scan on every push and pull request.
+[TruffleHog](https://github.com/trufflesecurity/trufflehog) runs **on your machine before anything reaches
+GitHub**. The commit hook scans your staged changes, and the push hook scans every commit you're about to push.
+If either finds something that looks like a secret, the commit or push is blocked. CI repeats the scan as a
+backstop.
 
 ```bash
-brew install trufflehog                                           # one-time
-uv run pre-commit install --hook-type pre-commit --hook-type pre-push
-uv run pre-commit run --all-files                                 # scan + lint everything now
+brew install trufflehog              # one-time
+uv run pre-commit install            # installs both the commit and the push hook
+uv run pre-commit run --all-files    # scan + lint everything now
 ```
 
 Keep secrets such as `ANTHROPIC_API_KEY` in your shell environment or in a `.env.*` file. Both `.env.*` and
-`*.env` are git-ignored.
+`*.env` are git-ignored. A false positive can be silenced with a `trufflehog:ignore` comment on that line.
+
+### 🛡️ Dependency security
+
+- **`.github/workflows/security.yml`** runs [pip-audit](https://github.com/pypa/pip-audit) against every
+  package pinned in `uv.lock`. It runs on each push and PR and every Monday, and fails when any package has a
+  known CVE.
+- **Dependabot** (`.github/dependabot.yml`) opens monthly PRs to bump outdated packages and Actions. Turn on
+  **Dependabot alerts** and **Dependabot security updates** under *Settings → Code security* to get alerted
+  and receive a fix PR as soon as a CVE is published.
 
 ### Project layout
 

@@ -1,14 +1,18 @@
-# Install once:  uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+# Install once:  uv run pre-commit install      (sets up both the commit and the push hook)
 # Run on everything:  uv run pre-commit run --all-files
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
 repos:
-  # --- Secrets: block commits/pushes that contain credentials -------------
+  # --- Secrets: block commits AND pushes that contain credentials ---------
+  # Commit: scans staged changes. Push: scans every commit being pushed.
   # Needs the trufflehog binary on PATH:  brew install trufflehog
   - repo: local
     hooks:
       - id: trufflehog
         name: TruffleHog (secret scan)
-        entry: bash -c 'trufflehog git file://. --since-commit HEAD --results=verified,unknown --fail --no-update'
-        language: system
+        entry: scripts/trufflehog-hook.sh
+        language: script
         pass_filenames: false
         stages: [pre-commit, pre-push]
 

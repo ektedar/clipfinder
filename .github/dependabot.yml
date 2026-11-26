@@ -1,3 +1,14 @@
+# Dependabot: GitHub's bot that opens pull requests to keep dependencies current.
+#
+# This file controls *version updates*: once a month it checks for newer
+# releases and opens one PR per outdated package, for both the GitHub Actions
+# used in .github/workflows and the Python packages pinned in uv.lock.
+#
+# Security fixes are separate and don't wait for the schedule. With Dependabot
+# alerts and security updates enabled (repo Settings → Code security), GitHub
+# alerts you as soon as a CVE affects a locked package and opens a fix PR
+# straight away. .github/workflows/security.yml also runs a CVE scan on every
+# push, PR and Monday.
 version: 2
 updates:
   - package-ecosystem: github-actions

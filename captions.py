@@ -20,6 +20,13 @@ FONT = "Arial Black"
 FONTS_DIR = "/System/Library/Fonts/Supplemental"   # macOS; fontconfig falls back elsewhere
 HIGHLIGHT = "&H0000E6FF&"     # ASS colours are &HBBGGRR& -> warm yellow
 _model = None
+# Whisper "hallucinates" on music, game audio and silence: it was trained on a lot
+# of YouTube subtitles, so with no clear speech it tends to output stock phrases
+# such as "you", "Thank you.", "Thanks for watching!" or "[Music]". Those would be
+# burned into the clip as fake captions. transcribe() drops a segment only when
+# its *whole* text is one of these phrases AND Whisper itself was unsure (high
+# no-speech probability or low confidence), so a streamer really saying
+# "thank you" mid-sentence is kept.
 _PHANTOM = re.compile(r"(you|thank you\.?|thanks for watching!?|bye\.?|\.+|music|\[music\]|subtitles by.*)[.!]?")
 
 

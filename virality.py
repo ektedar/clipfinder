@@ -33,7 +33,11 @@ from typing import Optional
 import numpy as np
 
 BIN = 0.5
-WEIGHTS = {"hook": 0.30, "hold": 0.25, "emotion": 0.20, "share": 0.15, "loop": 0.10}
+# Hand-tuned starting point, NOT published by any platform. TikTok, YouTube and
+# Instagram don't release ranking weights; they only say which signals matter
+# (see the module docstring). The same weights are used for all three platforms
+# for now. Revisit them if the platforms change what they reward.
+WEIGHTS ={"hook": 0.30, "hold": 0.25, "emotion": 0.20, "share": 0.15, "loop": 0.10}
 CLAUDE_MODEL = "claude-opus-5-5"
 
 # Spoken reactions that tend to drive comments and shares on gaming/stream clips

@@ -51,5 +51,6 @@ uv add <pkg>  /  uv add --dev <pkg>   # add a dependency (updates pyproject.toml
 ## Safety
 
 - Never commit secrets. `ANTHROPIC_API_KEY` belongs in the environment or a git-ignored `.env.*` file.
-  TruffleHog runs as a pre-commit and pre-push hook and in CI. Don't bypass it with `--no-verify`.
+  TruffleHog (`scripts/trufflehog-hook.sh`) runs on commit (staged changes) and on push (outgoing commits),
+  and again in CI. Install it with `uv run pre-commit install`. Never bypass it with `--no-verify`.
 - Don't `git push` or open PRs without the user's explicit permission.
