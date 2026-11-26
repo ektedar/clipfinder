@@ -25,6 +25,23 @@
       <rect x="-34" y="-20" width="10" height="26" rx="5" fill="#262a35"/><rect x="24" y="-20" width="10" height="26" rx="5" fill="#262a35"/>
       <path d="M-29 -20 C -28 -42, 28 -42, 29 -20" fill="none" stroke="#262a35" stroke-width="5"/>
     </g>
+    <style>
+      .w1 { animation: w1 2.4s steps(1) infinite; }
+      .w2 { animation: w2 2.4s steps(1) infinite; }
+      .w3 { animation: w3 2.4s steps(1) infinite; }
+      @keyframes w1 { 0% { fill: #ffe600; } 33.3% { fill: #ffffff; } }
+      @keyframes w2 { 0% { fill: #ffffff; } 33.3% { fill: #ffe600; } 66.6% { fill: #ffffff; } }
+      @keyframes w3 { 0% { fill: #ffffff; } 66.6% { fill: #ffe600; } }
+      .ph { animation: play 7s linear infinite; }
+      @keyframes play { from { transform: translateX(0); } to { transform: translateX(400px); } }
+      .pk { animation: pulse 1.8s ease-in-out infinite alternate; }
+      @keyframes pulse { from { opacity: .55; } to { opacity: 1; } }
+      .cam { animation: cam 2.4s ease-in-out infinite alternate; }
+      @keyframes cam { from { stroke-opacity: .45; } to { stroke-opacity: 1; } }
+      .flow { stroke-dasharray: 10 8; animation: flow 1s linear infinite; }
+      @keyframes flow { to { stroke-dashoffset: -18; } }
+      @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+    </style>
   </defs>
 
   <rect width="1000" height="440" rx="20" fill="#0e0f13"/>
@@ -34,7 +51,7 @@
   <g clip-path="url(#tv)">
     <rect x="40" y="110" width="400" height="225" fill="url(#sky)"/>
     <use href="#game" x="40" y="110"/>
-    <rect x="330" y="235" width="104" height="94" rx="6" fill="url(#cam)" stroke="#33d69f" stroke-width="2.5"/>
+    <rect x="330" y="235" width="104" height="94" rx="6" fill="url(#cam)" stroke="#33d69f" stroke-width="2.5" class="cam"/>
     <use href="#face" transform="translate(382 280) scale(.75)"/>
   </g>
   <rect x="40" y="110" width="400" height="225" rx="10" fill="none" stroke="#262a35" stroke-width="2"/>
@@ -42,14 +59,15 @@
   <text x="362" y="237" fill="#0e0f13" font-size="10" font-weight="800" text-anchor="middle">WEBCAM</text>
   <!-- scrubber with hype peaks -->
   <rect x="40" y="350" width="400" height="6" rx="3" fill="#262a35"/>
-  <rect x="140" y="347" width="18" height="12" rx="3" fill="url(#acc)"/>
-  <rect x="236" y="347" width="18" height="12" rx="3" fill="url(#acc)"/>
-  <rect x="318" y="347" width="18" height="12" rx="3" fill="url(#acc)"/>
-  <rect x="386" y="347" width="18" height="12" rx="3" fill="url(#acc)"/>
+  <rect class="pk" x="140" y="347" width="18" height="12" rx="3" fill="url(#acc)"/>
+  <rect class="pk" x="236" y="347" width="18" height="12" rx="3" fill="url(#acc)"/>
+  <rect class="pk" x="318" y="347" width="18" height="12" rx="3" fill="url(#acc)"/>
+  <rect class="pk" x="386" y="347" width="18" height="12" rx="3" fill="url(#acc)"/>
+  <g class="ph"><rect x="39" y="342" width="2" height="22" rx="1" fill="#f4f5f8"/><circle cx="40" cy="342" r="4" fill="#f4f5f8"/></g>
   <text x="40" y="384" fill="#8a90a2" font-size="13">The best moments get found automatically</text>
 
   <!-- ===== Arrow ===== -->
-  <rect x="470" y="220" width="172" height="4" rx="2" fill="url(#acc)"/>
+  <line class="flow" x1="470" y1="222" x2="640" y2="222" stroke="#ff7a45" stroke-width="4" stroke-linecap="round"/>
   <path d="M630 210 L 648 222 L 630 234" fill="none" stroke="#ffb020" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="556" y="200" fill="#e9ebf1" font-size="22" font-weight="800" text-anchor="middle">Clip<tspan fill="#ff3d6e">Finder</tspan></text>
   <text x="556" y="256" fill="#8a90a2" font-size="12" text-anchor="middle">find · reframe · caption</text>
@@ -65,7 +83,7 @@
   </g>
   <!-- caption sitting on the seam -->
   <g font-size="18" font-weight="900" text-anchor="middle" stroke="#0e0f13" stroke-width="5" paint-order="stroke" letter-spacing=".02em">
-    <text x="800" y="164"><tspan fill="#ffffff">NO WAY </tspan><tspan fill="#ffe600">HE</tspan><tspan fill="#ffffff"> HIT</tspan></text>
+    <text x="800" y="164"><tspan class="w1" fill="#ffffff">NO WAY</tspan> <tspan class="w2" fill="#ffffff">HE</tspan> <tspan class="w3" fill="#ffffff">HIT</tspan></text>
   </g>
   <!-- phone UI hints -->
   <circle cx="872" cy="250" r="9" fill="#e9ebf1" fill-opacity=".85"/>
