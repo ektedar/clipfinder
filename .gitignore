@@ -1,0 +1,11 @@
+# local environment + tools
+.env/
+.ffbin/
+__pycache__/
+*.pyc
+.claude/
+.DS_Store
+
+# downloads and rendered clips
+jobs/
+output/
