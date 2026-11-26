@@ -1,65 +1,167 @@
-# ClipFinder
+<div align="center">
 
-Paste a YouTube or Twitch link and get the most exciting moments as vertical
-**9:16 clips** (1080×1920), ready for TikTok, Instagram Reels and YouTube Shorts.
+# 🎬 ClipFinder
 
-## What it does
+### Turn a 3-hour stream into ready-to-post vertical shorts in minutes.
 
-1. **Downloads a small copy** of the video (360p) with `yt-dlp`, just for analysis.
-2. **Scores every half-second** of the video on:
-   - loudness compared with the surrounding minute (shouting, laughing, hype)
-   - sudden jumps in volume (reactions)
-   - how much the picture changes (fast action)
-   - YouTube's "most replayed" heatmap, when the video has one
-3. **Picks the top moments**, spread across the video, each 10–15 s long with
-   the peak about 60% of the way in (build-up before, reaction after).
-4. **Downloads only those seconds in HD** (up to 1080p60).
-5. **Finds the streamer's webcam**: a face that stays in one place across the
-   clip (works with green-screen cutouts as well as boxed cams; in-game faces
-   move around and are ignored). It stacks the **webcam on top** and the
-   **gameplay below**. If no cam is found, it falls back to a center crop.
-6. **Auto captions**: transcribes speech locally with Whisper and burns in
-   TikTok-style captions (bold, 1–3 words at a time, current word highlighted).
+Paste a **YouTube** or **Twitch** link. ClipFinder finds the most exciting moments, reframes them to
+**9:16** with the streamer's **webcam stacked on top**, burns in **TikTok-style captions**, and scores each
+clip for **virality**. Everything runs on your own machine.
 
-## Setup
+[![CI](https://github.com/ektedar/clipfinder/actions/workflows/ci.yml/badge.svg)](https://github.com/ektedar/clipfinder/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![TruffleHog](https://img.shields.io/badge/secrets-TruffleHog-ff3d6e?logo=trufflesecurity&logoColor=white)](https://github.com/trufflesecurity/trufflehog)
 
-Requires Python 3.10+ (macOS; captions use the system Arial Black font).
+<img src="docs/hero.svg" alt="A 16:9 stream with a webcam in the corner becomes a 9:16 short with the webcam on top, gameplay below and bold captions" width="100%">
 
-```bash
-python3 -m venv .env      # or: conda create -p ./.env python=3.12
-./.env/bin/python -m pip install -r requirements.txt
-```
+</div>
 
-ffmpeg comes bundled through `imageio-ffmpeg`, so there's nothing else to
-install. The first captioned run downloads the Whisper `small` model (~460 MB)
-from Hugging Face.
+---
 
-## Use it
+## ✨ See it in action
 
-Web UI:
+<table>
+<tr>
+<td width="28%" align="center" valign="top">
+<img src="docs/demo.gif" alt="An auto-generated vertical clip playing" width="220"><br>
+<sub>One of the auto-picked clips</sub>
+</td>
+<td valign="top">
+<img src="docs/clips-strip.jpg" alt="Four vertical clips ClipFinder picked from a 10-minute film" width="100%"><br>
+<sub>Four clips found in a 10-minute film with <b>no manual editing</b>: each is a 10–15&nbsp;s, 1080×1920 MP4.</sub>
+</td>
+</tr>
+</table>
 
-```bash
-./.env/bin/python app.py      # then open http://localhost:5050
-```
+<sub>Demo footage: <i>Big Buck Bunny</i> © Blender Foundation, <a href="https://peach.blender.org">peach.blender.org</a>, CC BY 3.0.</sub>
 
-Command line:
+## 🚀 Features
 
-```bash
-./.env/bin/python clipper.py "https://www.twitch.tv/videos/..." --count 5
-./.env/bin/python clipper.py video.mp4 --mode blur --no-captions
-```
-
-Options: `--count`, `--min` / `--max` (clip length in seconds),
-`--mode facecam|crop|blur`, `--cam 0.35` (share of the height for the webcam),
-`--no-captions`, `--out` (output folder).
-
-## Files
-
-| File | What it is |
+| | |
 | --- | --- |
-| `clipper.py` | Pipeline: download, analyze, score, select, webcam detection, render |
-| `captions.py` | Whisper transcription and caption styling (.ass subtitles) |
-| `app.py` / `index.html` | Local web UI (Flask) |
-| `models/` | YuNet face detector from [OpenCV Zoo](https://github.com/opencv/opencv_zoo) (MIT) |
+| 🔥 **Finds the hype** | Scores every half-second on loudness, sudden reactions, on-screen action and YouTube's *Most replayed* heatmap |
+| 📱 **Smart 9:16 framing** | Detects the streamer's webcam (boxed *or* green-screen cutout) and stacks it above the gameplay |
+| 💬 **Auto captions** | Local Whisper transcription, burned in 1–3 bold words at a time with the spoken word highlighted |
+| 📈 **Virality score** | Each clip is graded 0–99 on hook, hold, emotion, shareability and loop, with tips to improve it. A Claude rubric is used when an API key is set |
+| 🔍 **Check any short** | Upload an existing TikTok, Short or Reel (or paste a link) and get a virality score plus a format checklist |
+| 🎞️ **HD output** | Analyses a tiny 360p copy, then downloads **only the chosen seconds** in up to 1080p60 |
+| 🔒 **Private by default** | Runs entirely on your machine; ffmpeg is bundled, so there's nothing else to install |
 
-Only clip videos you own or have permission to use.
+## 🧠 How it works
+
+```mermaid
+flowchart LR
+    A["🔗 YouTube / Twitch link"] --> B["⬇️ Download<br/>360p analysis copy"]
+    B --> C["🎧 Analyse<br/>loudness · reactions<br/>motion · replay heatmap"]
+    C --> D["📊 Score<br/>local z-scores,<br/>weighted + smoothed"]
+    D --> E["✂️ Select<br/>top peaks, spaced out,<br/>10–15 s each"]
+    E --> F["🎬 Render<br/>HD section · webcam detect<br/>9:16 · captions"]
+    F --> G["📈 Rank<br/>virality score"]
+    G --> H["📱 Ready-to-post shorts"]
+```
+
+Every moment is compared with the **minute and a half around it**, not the whole video, so a loud intro or a
+quiet stretch never drowns out the real highlights. This is the actual score for the film above, with the
+picked clips in green:
+
+<img src="docs/timeline.svg" alt="Excitement score over a 10-minute video, with five selected clips highlighted at the peaks" width="100%">
+
+Each clip is cut so the peak lands **about 60% of the way in**: build-up before, reaction after.
+
+## 🖼️ Framing modes
+
+<img src="docs/modes.svg" alt="Three framing modes: facecam, crop and blur" width="100%">
+
+`facecam` looks for a face that **stays in the same place** across the clip. In-game characters move
+around, and the webcam doesn't. If no cam is found, ClipFinder falls back to `crop`.
+
+## ⚡ Quick start
+
+You'll need [**uv**](https://docs.astral.sh/uv/) (`brew install uv`). It installs the right Python for you.
+
+```bash
+git clone https://github.com/ektedar/clipfinder.git
+cd clipfinder
+uv sync                 # creates .venv with every dependency
+uv run app.py           # → http://localhost:5050
+```
+
+> [!NOTE]
+> The first captioned run downloads the Whisper `small` model (~460 MB) from Hugging Face.
+> Captions use the macOS *Arial Black* font. On other systems fontconfig picks a fallback.
+
+### Web UI
+
+Run `uv run app.py`, open <http://localhost:5050>, and choose a tab:
+
+- **Generate clips**: paste a link, pick a clip count, length and framing, then hit *Find clips*.
+- **Check virality**: drop in an existing short (MP4/MOV/WEBM/MKV, up to 500 MB) or paste its link.
+
+### Command line
+
+```bash
+uv run clipper.py "https://www.twitch.tv/videos/..." --count 5
+uv run clipper.py video.mp4 --mode blur --no-captions
+```
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `--count` | `5` | Number of clips |
+| `--min` / `--max` | `10` / `15` | Clip length in seconds |
+| `--mode` | `facecam` | `facecam`, `crop` or `blur` |
+| `--cam` | `0.35` | Share of the height given to the webcam (0.25–0.5) |
+| `--no-captions` | | Skip Whisper captions |
+| `--no-virality` | | Skip virality scoring and ranking |
+| `--out` | `output` | Output folder |
+
+### Optional: Claude-powered ranking
+
+Set `ANTHROPIC_API_KEY` (or log in with `ant auth login`) and ClipFinder adds a Claude rubric that compares
+candidate clips against each other. Without it, the local signal-based scoring is used.
+
+## 🛠️ Development
+
+ClipFinder is a [uv](https://docs.astral.sh/uv/) project. Dependencies live in `pyproject.toml` and are pinned
+in `uv.lock`.
+
+```bash
+uv sync                          # app + dev tools (ruff, pytest, pre-commit)
+uv run pytest                    # tests
+uv run ruff check .              # lint   (add --fix to auto-fix)
+uv run ruff format .             # format
+```
+
+### 🔐 Secret scanning with TruffleHog
+
+Git hooks scan every commit **and** push with [TruffleHog](https://github.com/trufflesecurity/trufflehog), so an
+API key can't slip into GitHub by accident. CI runs the same scan on every push and pull request.
+
+```bash
+brew install trufflehog                                           # one-time
+uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+uv run pre-commit run --all-files                                 # scan + lint everything now
+```
+
+Keep secrets such as `ANTHROPIC_API_KEY` in your shell environment or in a `.env.*` file. Both `.env.*` and
+`*.env` are git-ignored.
+
+### Project layout
+
+| Path | What it is |
+| --- | --- |
+| `clipper.py` | Pipeline: download, analyse, score, select, webcam detection, render, virality ranking |
+| `captions.py` | Whisper transcription and caption styling (`.ass` subtitles) |
+| `virality.py` | Virality model (hook / hold / emotion / share / loop) and the optional Claude rubric |
+| `checker.py` | Virality check and format checklist for an existing short |
+| `app.py` / `index.html` | Local web UI (Flask + Bootstrap) |
+| `models/` | YuNet face detector from [OpenCV Zoo](https://github.com/opencv/opencv_zoo) (MIT) |
+| `tests/` | pytest suite for the pure scoring and caption logic |
+| `docs/` | Images used in this README |
+
+---
+
+<div align="center">
+<sub>Only clip videos you own or have permission to use.</sub>
+</div>

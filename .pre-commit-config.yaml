@@ -1,0 +1,36 @@
+# Install once:  uv run pre-commit install --hook-type pre-commit --hook-type pre-push
+# Run on everything:  uv run pre-commit run --all-files
+repos:
+  # --- Secrets: block commits/pushes that contain credentials -------------
+  # Needs the trufflehog binary on PATH:  brew install trufflehog
+  - repo: local
+    hooks:
+      - id: trufflehog
+        name: TruffleHog (secret scan)
+        entry: bash -c 'trufflehog git file://. --since-commit HEAD --results=verified,unknown --fail --no-update'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
+
+  # --- Lint + format ------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+      - id: ruff-format
+        args: [--check]
+
+  # --- General hygiene ----------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: check-json
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]

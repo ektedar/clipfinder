@@ -1,0 +1,79 @@
+[project]
+name = "clipfinder"
+version = "0.1.0"
+description = "Turn long YouTube/Twitch videos into captioned 9:16 shorts, automatically."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["youtube", "twitch", "tiktok", "shorts", "reels", "video", "clipping", "whisper"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: MacOS",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = [
+    "yt-dlp",
+    "numpy",
+    "flask",
+    "imageio-ffmpeg",
+    "opencv-python-headless",
+    "faster-whisper",
+    "anthropic",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "pytest>=8",
+    "pre-commit>=4",
+]
+
+[tool.uv]
+# ClipFinder runs as a local app from a checkout, not as an installed package.
+package = false
+# Make the lockfile resolve to versions that ship wheels for both Mac types
+# (newer onnxruntime / ctranslate2 releases dropped Intel macOS wheels).
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+# ---------------------------------------------------------------- Ruff
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["jobs", "output", ".ffbin", ".env"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "C4",  # flake8-comprehensions
+    "S",   # flake8-bandit (security)
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501",   # long lines are handled by the formatter
+    "S603",   # subprocess calls are intentional (ffmpeg)
+    "S607",
+    "RUF001", # ambiguous unicode in strings (arrows, en dashes are intentional)
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"] # asserts are the point of tests
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
