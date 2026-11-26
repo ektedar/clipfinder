@@ -1,200 +1,582 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Clip Finder</title>
+<title>ClipFinder</title>
+<script>
+  // apply the saved theme before first paint (no flash); default is the dimmed light theme
+  (function () {
+    var t = 'light';
+    try { t = localStorage.getItem('cf-theme') || 'light'; } catch (e) {}
+    document.documentElement.setAttribute('data-bs-theme', t === 'dark' ? 'dark' : 'light');
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.9/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.2/font/bootstrap-icons.min.css" rel="stylesheet" crossorigin="anonymous">
 <style>
   :root {
-    --bg: #0e0f13; --panel: #171920; --line: #262a35; --text: #e9ebf1; --muted: #8a90a2;
-    --accent: #ff3d6e; --accent2: #ffb020; --ok: #33d69f;
+    --cf-pink: #ff4d8d;
+    --cf-amber: #ffb547;
+    --cf-grad: linear-gradient(135deg, var(--cf-pink), var(--cf-amber));
+    --bs-body-font-family: "Inter", system-ui, -apple-system, sans-serif;
+    --bs-link-color-rgb: 255, 77, 141;
+    --bs-focus-ring-color: rgba(255, 77, 141, .25);
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif; }
-  main { max-width: 1100px; margin: 0 auto; padding: 40px 16px 80px; }
-  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
-  h1 span { color: var(--accent); }
-  .sub { color: var(--muted); margin: 0 0 28px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; }
-  input[type=text] { flex: 1 1 380px; min-width: 0; background: #0b0c10; border: 1px solid var(--line); color: var(--text);
-         border-radius: 10px; padding: 13px 14px; font-size: 15px; outline: none; }
-  input[type=text]:focus { border-color: var(--accent); }
-  button { background: var(--accent); color: white; border: 0; border-radius: 10px; padding: 0 22px;
-           font-weight: 600; font-size: 15px; cursor: pointer; min-height: 46px; }
-  button:disabled { opacity: .5; cursor: default; }
-  .opts { margin-top: 14px; display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 14px; align-items: center; }
-  .opts label { display: flex; gap: 8px; align-items: center; }
-  .opts input[type=number], .opts select { background: #0b0c10; color: var(--text); border: 1px solid var(--line);
-           border-radius: 8px; padding: 6px 8px; width: 64px; font-size: 14px; }
-  .opts select { width: auto; }
-  #status { margin-top: 22px; display: none; }
-  .bar { height: 8px; background: #0b0c10; border-radius: 99px; overflow: hidden; margin-top: 10px; }
-  .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .4s; }
-  .msg { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; }
-  .err { color: #ff6b6b; }
-  #results { margin-top: 28px; display: none; }
-  #results h2 { font-size: 18px; margin: 0 0 4px; }
-  .meta { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
-  canvas { width: 100%; height: 120px; display: block; }
-  .legend { color: var(--muted); font-size: 12px; margin-top: 6px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 20px; }
-  .clip { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; scroll-margin-top: 20px; }
-  .clip.flash { border-color: var(--accent); }
-  .clip video { width: 100%; aspect-ratio: 9/16; background: #000; display: block; }
-  .clip .info { padding: 10px 12px 12px; }
-  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px;
-           background: rgba(255,61,110,.14); color: var(--accent); font-weight: 600; }
-  .badge.lay { background: rgba(51,214,159,.12); color: var(--ok); margin-top: 4px; }
-  .clip .cap { font-size: 13px; margin-top: 8px; color: var(--text); opacity: .85; }
-  .opts input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
-  .clip .t { color: var(--muted); font-size: 13px; margin: 6px 0 10px; }
-  .clip a { color: var(--text); font-size: 13px; text-decoration: none; border: 1px solid var(--line);
-            border-radius: 8px; padding: 6px 10px; display: inline-block; }
-  .clip a:hover { border-color: var(--accent); }
+  /* Dimmed light: soft lavender-grey, never bright white */
+  [data-bs-theme="light"] {
+    --cf-bg: #e4e2ec;
+    --cf-glow-1: rgba(139,123,255,.16);
+    --cf-glow-2: rgba(255,77,141,.10);
+    --cf-card: rgba(241,240,247,.92);
+    --cf-surface: rgba(255,255,255,.45);
+    --cf-surface-2: rgba(40,34,80,.06);
+    --cf-input: rgba(255,255,255,.62);
+    --cf-border: rgba(40,34,80,.11);
+    --cf-track: rgba(40,34,80,.09);
+    --cf-dash: rgba(40,34,80,.22);
+    --cf-shadow: 0 10px 30px rgba(60,50,110,.10);
+    --cf-tip: #9a5a00;
+    --cf-quote: #2c2d40;
+    --cf-violet: #6352e0;
+    --cf-green: #13925e;
+    --cf-pink-text: #d8306f;
+    --cf-grade-a: #3e9a3e;
+    --cf-grade-c: #d2622c;
+    --cf-axis: #6a6f85;
+    --bs-body-bg: var(--cf-bg);
+    --bs-body-color: #24253a;
+    --bs-emphasis-color: #1a1b2c;
+    --bs-secondary-color: #646a80;
+    --bs-border-color: var(--cf-border);
+  }
+  [data-bs-theme="dark"] {
+    --cf-bg: #0b0c12;
+    --cf-glow-1: rgba(139,123,255,.18);
+    --cf-glow-2: rgba(255,77,141,.14);
+    --cf-card: rgba(22,23,32,.72);
+    --cf-surface: rgba(255,255,255,.035);
+    --cf-surface-2: rgba(255,255,255,.06);
+    --cf-input: rgba(0,0,0,.35);
+    --cf-border: rgba(255,255,255,.08);
+    --cf-track: rgba(255,255,255,.08);
+    --cf-dash: rgba(255,255,255,.15);
+    --cf-shadow: 0 10px 30px rgba(0,0,0,.25);
+    --cf-tip: #ffd39a;
+    --cf-quote: #d7dae6;
+    --cf-violet: #8b7bff;
+    --cf-green: #3ddc97;
+    --cf-pink-text: #ff4d8d;
+    --cf-grade-a: #8be38b;
+    --cf-grade-c: #ff9b6b;
+    --cf-axis: #9aa0b4;
+    --bs-body-bg: var(--cf-bg);
+    --bs-secondary-color: #9aa0b4;
+    --bs-border-color: var(--cf-border);
+  }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 500px at 10% -10%, var(--cf-glow-1), transparent 60%),
+      radial-gradient(800px 500px at 100% 0%, var(--cf-glow-2), transparent 60%),
+      var(--cf-bg);
+    background-attachment: fixed;
+    letter-spacing: -0.005em;
+    transition: background-color .25s ease, color .25s ease;
+  }
+  .brand { font-weight: 800; letter-spacing: -0.03em; font-size: 1.35rem; }
+  .brand span { background: var(--cf-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .brand .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--cf-grad);
+                 display: inline-grid; place-items: center; color: #fff; font-size: 1rem; margin-right: .5rem;
+                 box-shadow: 0 6px 24px rgba(255,77,141,.35); }
+  .hero h1 { font-weight: 800; letter-spacing: -0.035em; font-size: clamp(1.9rem, 4vw, 2.8rem); }
+  .hero h1 em { font-style: normal; background: var(--cf-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .glass { background: var(--cf-card); border: 1px solid var(--cf-border); border-radius: 1.25rem; box-shadow: var(--cf-shadow);
+           transition: background-color .25s ease; }
+  .nav-pills.cf { background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: 999px; padding: .3rem; display: inline-flex; }
+  .nav-pills.cf .nav-link { border-radius: 999px; color: var(--bs-secondary-color); font-weight: 600; padding: .55rem 1.2rem; }
+  .nav-pills.cf .nav-link.active { background: var(--cf-grad); color: #fff; box-shadow: 0 6px 20px rgba(255,77,141,.3); }
+  .btn-cf { background: var(--cf-grad); border: 0; color: #fff; font-weight: 700; border-radius: .9rem; padding: .75rem 1.4rem; }
+  .btn-cf:hover, .btn-cf:focus { color: #fff; filter: brightness(1.08); }
+  .btn-cf:disabled { opacity: .55; color: #fff; }
+  .btn-ghost { border: 1px solid var(--cf-border); background: var(--cf-surface); color: var(--bs-body-color); }
+  .btn-ghost:hover { border-color: var(--cf-pink); color: var(--cf-pink-text); background: var(--cf-surface); }
+  .form-control, .form-select { background-color: var(--cf-input); border-color: var(--cf-border); border-radius: .9rem; }
+  .form-control:focus, .form-select:focus { background-color: var(--cf-input); border-color: rgba(255,77,141,.5); }
+  .form-control-lg { padding: .85rem 1.1rem; }
+  .input-group-text { background: var(--cf-input); border-color: var(--cf-border); border-radius: .9rem; color: var(--bs-secondary-color); }
+  .form-check-input { background-color: var(--cf-input); border-color: var(--cf-dash); }
+  .form-check-input:checked { background-color: var(--cf-pink); border-color: var(--cf-pink); }
+  .opt-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--bs-secondary-color); font-weight: 600; }
+  .progress { height: .55rem; background: var(--cf-track); border-radius: 999px; }
+  .progress-bar { background: var(--cf-grad); }
+  .clip-card { background: var(--cf-card); border: 1px solid var(--cf-border); border-radius: 1.1rem; overflow: hidden; box-shadow: var(--cf-shadow);
+               transition: transform .15s ease, border-color .15s ease; scroll-margin-top: 1.5rem; }
+  .clip-card:hover { transform: translateY(-2px); border-color: rgba(255,77,141,.35); }
+  .clip-card.flash { border-color: var(--cf-pink); box-shadow: 0 0 0 3px rgba(255,77,141,.25); }
+  .clip-card video, .preview video { background: #000; object-fit: contain; }
+  .rank { position: absolute; top: .6rem; left: .6rem; z-index: 2; font-weight: 800; font-size: .8rem; color: #fff;
+          background: rgba(0,0,0,.6); backdrop-filter: blur(6px); border-radius: 999px; padding: .2rem .6rem; }
+  .chip { display: inline-flex; align-items: center; gap: .3rem; font-size: .72rem; font-weight: 600; border-radius: 999px;
+          padding: .2rem .6rem; background: var(--cf-surface-2); color: var(--bs-secondary-color); }
+  .chip.pink { background: rgba(255,77,141,.14); color: var(--cf-pink-text); }
+  .chip.green { background: rgba(61,220,151,.14); color: var(--cf-green); }
+  .chip.violet { background: rgba(139,123,255,.15); color: var(--cf-violet); }
+  /* theme toggle */
+  .theme-toggle { display: inline-flex; padding: .2rem; border-radius: 999px; background: var(--cf-surface); border: 1px solid var(--cf-border); }
+  .theme-toggle button { border: 0; background: transparent; color: var(--bs-secondary-color); border-radius: 999px;
+                         padding: .3rem .7rem; font-size: .8rem; font-weight: 600; display: inline-flex; gap: .35rem; align-items: center; }
+  .theme-toggle button.active { background: var(--cf-card); color: var(--bs-emphasis-color); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  [data-bs-theme="dark"] .theme-toggle button.active { background: rgba(255,255,255,.1); }
+  /* score ring */
+  .ring { position: relative; flex: none; }
+  .ring svg { transform: rotate(-90deg); display: block; }
+  .ring .track { stroke: var(--cf-track); }
+  .ring .val { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
+  .ring .val b { font-weight: 800; display: block; }
+  .ring .val small { color: var(--bs-secondary-color); font-weight: 700; font-size: .7em; }
+  .bars { display: grid; grid-template-columns: 64px 1fr 28px; gap: .35rem .6rem; align-items: center; font-size: .78rem; }
+  .bars .lbl { color: var(--bs-secondary-color); }
+  .bars .num { text-align: right; font-weight: 600; }
+  .bars .track { height: .4rem; background: var(--cf-track); border-radius: 999px; overflow: hidden; }
+  .bars .track i { display: block; height: 100%; border-radius: 999px; background: var(--cf-grad); }
+  .tips { list-style: none; padding: 0; margin: 0; }
+  .tips li { position: relative; padding-left: 1.35rem; margin: .35rem 0; font-size: .82rem; color: var(--cf-tip); }
+  .tips li > .bi { position: absolute; left: 0; top: .05rem; color: var(--cf-amber); }
+  .quote { font-size: .85rem; color: var(--cf-quote); border-left: 2px solid var(--cf-pink); padding-left: .6rem; }
+  .drop { border: 2px dashed var(--cf-dash); border-radius: 1.25rem; padding: 2.5rem 1rem; text-align: center; cursor: pointer;
+          transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--cf-pink); background: rgba(255,77,141,.05); }
+  .drop .bi { font-size: 2.4rem; background: var(--cf-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .or { display: flex; align-items: center; gap: .8rem; color: var(--bs-secondary-color); font-size: .8rem; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--cf-border); }
+  .check-item { display: flex; gap: .7rem; align-items: flex-start; padding: .6rem 0; border-bottom: 1px solid var(--cf-border); }
+  .check-item:last-child { border-bottom: 0; }
+  .check-item .bi { font-size: 1.05rem; margin-top: .05rem; }
+  .preview { max-width: 320px; margin: 0 auto; border-radius: 1.1rem; overflow: hidden; border: 1px solid var(--cf-border); box-shadow: var(--cf-shadow); }
+  canvas.timeline { width: 100%; height: 110px; display: block; cursor: pointer; }
+  .grade-S { color: var(--cf-green); } .grade-A { color: var(--cf-grade-a); } .grade-B { color: #d98a00; }
+  [data-bs-theme="dark"] .grade-B { color: var(--cf-amber); }
+  .grade-C { color: var(--cf-grade-c); } .grade-D { color: var(--cf-pink-text); }
+  footer { color: var(--bs-secondary-color); font-size: .8rem; }
 </style>
 </head>
 <body>
-<main>
-  <h1>Clip<span>Finder</span></h1>
-  <p class="sub">Paste a YouTube or Twitch link. It finds the loudest, most reactive, most action-packed moments and cuts vertical 9:16 clips for Reels, TikTok and Shorts.</p>
-
-  <div class="card">
-    <form id="f" class="row">
-      <input id="url" type="text" placeholder="https://www.youtube.com/watch?v=…  or  https://www.twitch.tv/videos/…" autocomplete="off">
-      <button id="go">Find clips</button>
-    </form>
-    <div class="opts">
-      <label>Clips <input id="count" type="number" min="1" max="15" value="5"></label>
-      <label>Length <input id="min" type="number" min="5" max="60" value="10"> – <input id="max" type="number" min="5" max="60" value="15"> s</label>
-      <label>Framing
-        <select id="mode">
-          <option value="facecam">Webcam on top + gameplay (auto-detect)</option>
-          <option value="crop">Center crop (fills screen)</option>
-          <option value="blur">Fit + blurred background</option>
-        </select>
-      </label>
-      <label><input id="caps" type="checkbox" checked> Auto captions</label>
-      <label id="camwrap">Webcam size
-        <select id="cam">
-          <option value="0.3">30% of height</option>
-          <option value="0.35" selected>35%</option>
-          <option value="0.4">40%</option>
-          <option value="0.5">50% (half)</option>
-        </select>
-      </label>
+<nav class="container py-4 d-flex align-items-center justify-content-between gap-2">
+  <div class="brand"><span class="logo"><i class="bi bi-scissors"></i></span>Clip<span>Finder</span></div>
+  <div class="d-flex align-items-center gap-2">
+    <span class="chip violet d-none d-md-inline-flex"><i class="bi bi-cpu"></i> Runs on your Mac</span>
+    <div class="theme-toggle" role="group" aria-label="Theme">
+      <button type="button" data-theme="light" aria-label="Light theme"><i class="bi bi-sun"></i><span class="d-none d-sm-inline">Light</span></button>
+      <button type="button" data-theme="dark" aria-label="Dark theme"><i class="bi bi-moon-stars"></i><span class="d-none d-sm-inline">Dark</span></button>
     </div>
   </div>
+</nav>
 
-  <div id="status" class="card">
-    <div class="msg"><span id="msg">Starting…</span><span id="pct">0%</span></div>
-    <div class="bar"><div id="fill"></div></div>
-  </div>
-
-  <section id="results">
-    <div class="card">
-      <h2 id="title"></h2>
-      <div class="meta" id="meta"></div>
-      <canvas id="chart"></canvas>
-      <div class="legend">Excitement over the whole video. Pink bands are the clips we cut. Click one to jump to it.</div>
-    </div>
-    <div class="grid" id="grid"></div>
+<main class="container pb-5" style="max-width: 1120px">
+  <section class="hero text-center mb-4">
+    <h1 class="mb-2">Turn streams into <em>viral shorts</em></h1>
+    <p class="text-secondary mb-4 mx-auto" style="max-width: 620px">
+      Find the hype moments in a YouTube or Twitch video and cut vertical 9:16 clips, or score a short you already made.
+    </p>
+    <ul class="nav nav-pills cf" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="tab-gen" data-bs-toggle="pill" data-bs-target="#pane-gen" type="button" role="tab">
+          <i class="bi bi-magic me-1"></i> Generate clips</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tab-check" data-bs-toggle="pill" data-bs-target="#pane-check" type="button" role="tab">
+          <i class="bi bi-graph-up-arrow me-1"></i> Check virality</button>
+      </li>
+    </ul>
   </section>
+
+  <div class="tab-content">
+    <!-- ============================ GENERATE ============================ -->
+    <div class="tab-pane fade show active" id="pane-gen" role="tabpanel">
+      <div class="glass p-3 p-md-4">
+        <form id="gen-form" class="d-flex flex-column flex-md-row gap-2">
+          <div class="input-group input-group-lg flex-grow-1">
+            <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+            <input id="url" type="text" class="form-control form-control-lg" autocomplete="off"
+                   placeholder="Paste a YouTube or Twitch link">
+          </div>
+          <button id="go" class="btn btn-cf btn-lg text-nowrap"><i class="bi bi-stars me-1"></i> Find clips</button>
+        </form>
+
+        <div class="row g-3 mt-2 align-items-end">
+          <div class="col-6 col-md-2">
+            <label class="opt-label mb-1" for="count">Clips</label>
+            <input id="count" type="number" class="form-control" min="1" max="15" value="5">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="opt-label mb-1">Length (s)</label>
+            <div class="input-group">
+              <input id="min" type="number" class="form-control" min="5" max="60" value="10">
+              <span class="input-group-text">–</span>
+              <input id="max" type="number" class="form-control" min="5" max="60" value="15">
+            </div>
+          </div>
+          <div class="col-12 col-md-4">
+            <label class="opt-label mb-1" for="mode">Framing</label>
+            <select id="mode" class="form-select">
+              <option value="facecam">Webcam on top + gameplay</option>
+              <option value="crop">Center crop</option>
+              <option value="blur">Fit + blurred background</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-3" id="camwrap">
+            <label class="opt-label mb-1" for="cam">Webcam size</label>
+            <select id="cam" class="form-select">
+              <option value="0.3">30% of height</option>
+              <option value="0.35" selected>35%</option>
+              <option value="0.4">40%</option>
+              <option value="0.5">50% (half)</option>
+            </select>
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-4 mt-3">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="caps" checked>
+            <label class="form-check-label small" for="caps">Auto captions</label>
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="vir" checked>
+            <label class="form-check-label small" for="vir">Virality ranking
+              <span class="text-secondary">(scores 3× more moments, keeps the best)</span></label>
+          </div>
+        </div>
+      </div>
+
+      <div id="gen-status" class="glass p-3 p-md-4 mt-3 d-none">
+        <div class="d-flex justify-content-between small mb-2">
+          <span id="gen-msg" class="text-secondary">Starting…</span><span id="gen-pct" class="fw-semibold">0%</span>
+        </div>
+        <div class="progress"><div id="gen-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div></div>
+      </div>
+
+      <section id="gen-results" class="mt-4 d-none">
+        <div class="glass p-3 p-md-4 mb-4">
+          <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+            <div>
+              <h2 id="gen-title" class="h5 fw-bold mb-1"></h2>
+              <div id="gen-meta" class="d-flex flex-wrap gap-2"></div>
+            </div>
+          </div>
+          <canvas id="gen-chart" class="timeline mt-2"></canvas>
+          <div class="small text-secondary mt-1"><i class="bi bi-activity"></i> Excitement across the whole video. Pink bands are the clips; click one to jump to it.</div>
+        </div>
+        <div id="gen-grid" class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-4"></div>
+      </section>
+    </div>
+
+    <!-- ============================ CHECK ============================ -->
+    <div class="tab-pane fade" id="pane-check" role="tabpanel">
+      <div class="glass p-3 p-md-4">
+        <form id="check-form">
+          <label id="drop" class="drop d-block" for="file">
+            <i class="bi bi-cloud-arrow-up"></i>
+            <div class="fw-semibold mt-2" id="drop-text">Drop a TikTok, Short or Reel here</div>
+            <div class="small text-secondary">or click to browse · MP4, MOV, WEBM · up to 500 MB</div>
+            <input id="file" type="file" accept="video/*" class="d-none">
+          </label>
+          <div class="or my-3">or paste a link</div>
+          <div class="d-flex flex-column flex-md-row gap-2">
+            <div class="input-group input-group-lg flex-grow-1">
+              <span class="input-group-text"><i class="bi bi-link-45deg"></i></span>
+              <input id="check-url" type="text" class="form-control form-control-lg" autocomplete="off"
+                     placeholder="https://www.tiktok.com/@user/video/…  or a Shorts / Reels link">
+            </div>
+            <button id="check-go" class="btn btn-cf btn-lg text-nowrap"><i class="bi bi-speedometer2 me-1"></i> Check virality</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="check-status" class="glass p-3 p-md-4 mt-3 d-none">
+        <div class="d-flex justify-content-between small mb-2">
+          <span id="check-msg" class="text-secondary">Starting…</span><span id="check-pct" class="fw-semibold">0%</span>
+        </div>
+        <div class="progress"><div id="check-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div></div>
+      </div>
+
+      <section id="check-results" class="mt-4 d-none">
+        <div class="row g-4">
+          <div class="col-12 col-lg-4">
+            <div class="preview ratio" style="--bs-aspect-ratio: 177.78%"><video id="check-video" controls playsinline preload="metadata"></video></div>
+            <div id="check-file-meta" class="text-center small text-secondary mt-2"></div>
+          </div>
+          <div class="col-12 col-lg-8">
+            <div class="glass p-3 p-md-4 mb-4">
+              <div class="d-flex flex-wrap gap-4 align-items-center">
+                <div id="check-ring"></div>
+                <div class="flex-grow-1" style="min-width: 220px">
+                  <div class="opt-label">Virality score</div>
+                  <div id="check-verdict" class="h4 fw-bold mb-1"></div>
+                  <div id="check-sub" class="d-flex flex-wrap gap-2"></div>
+                </div>
+              </div>
+              <div id="check-claude" class="mt-3"></div>
+              <div id="check-bars" class="bars mt-3"></div>
+            </div>
+            <div class="row g-4">
+              <div class="col-12 col-md-6">
+                <div class="glass p-3 p-md-4 h-100">
+                  <h3 class="h6 fw-bold mb-2"><i class="bi bi-list-check me-1"></i> Format checklist</h3>
+                  <div id="check-list"></div>
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <div class="glass p-3 p-md-4 h-100">
+                  <h3 class="h6 fw-bold mb-2"><i class="bi bi-lightbulb me-1"></i> How to improve it</h3>
+                  <ul id="check-tips" class="tips"></ul>
+                </div>
+              </div>
+            </div>
+            <div class="glass p-3 p-md-4 mt-4">
+              <h3 class="h6 fw-bold mb-2"><i class="bi bi-activity me-1"></i> Energy over time</h3>
+              <canvas id="check-chart" class="timeline"></canvas>
+              <h3 class="h6 fw-bold mt-3 mb-2"><i class="bi bi-chat-quote me-1"></i> Transcript</h3>
+              <div id="check-transcript" class="quote"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
 </main>
 
+<footer class="container text-center pb-4">
+  Virality scores are estimates built from audio, motion and speech signals (plus Claude when configured), not a guarantee.
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.9/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 <script>
 const $ = id => document.getElementById(id);
+const esc = t => String(t ?? '').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[ch]);
 const fmt = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60;
   return (h ? h + ':' + String(m).padStart(2,'0') : m) + ':' + String(x).padStart(2,'0'); };
-let lastResult = null, lastJob = null;
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const scoreColor = s => s >= 72 ? cssVar('--cf-green') : s >= 50 ? '#ffb547' : '#ff4d8d';
+const VERDICT = { S: 'Strong viral potential', A: 'Good chance to perform', B: 'Decent, with room to improve', C: 'Needs work', D: 'Unlikely to travel' };
 
-$('f').addEventListener('submit', async e => {
+function ring(v, size = 64, stroke = 6) {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r, off = c * (1 - v.score / 100);
+  return `<div class="ring" style="width:${size}px;height:${size}px">
+    <svg width="${size}" height="${size}"><circle class="track" cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke-width="${stroke}"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${scoreColor(v.score)}" stroke-width="${stroke}"
+              stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>
+    <div class="val"><div><b style="font-size:${size/3.2}px">${v.score}</b><small class="grade-${v.grade}">${v.grade}</small></div></div></div>`;
+}
+function bars(v) {
+  return [['Hook', v.hook], ['Hold', v.hold], ['Emotion', v.emotion], ['Share', v.share], ['Loop', v.loop]]
+    .map(([k, x]) => `<span class="lbl">${k}</span><div class="track"><i style="width:${x}%"></i></div><span class="num">${x}</span>`).join('');
+}
+function setProgress(p, msg, frac) {
+  $(p + '-msg').textContent = msg; $(p + '-msg').className = 'text-secondary';
+  $(p + '-pct').textContent = Math.round(frac * 100) + '%';
+  $(p + '-bar').style.width = (frac * 100) + '%';
+}
+function fail(p, msg) {
+  $(p + '-status').classList.remove('d-none');
+  $(p + '-msg').innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>' + esc(msg);
+  $(p + '-msg').className = 'text-danger';
+  $(p === 'gen' ? 'go' : 'check-go').disabled = false;
+}
+async function poll(p, id, onDone) {
+  let j;
+  try { j = await (await fetch('/api/jobs/' + id)).json(); } catch { return setTimeout(() => poll(p, id, onDone), 1500); }
+  if (j.error && !j.status) return fail(p, j.error);
+  if (j.status === 'running') { setProgress(p, j.message, j.progress); return setTimeout(() => poll(p, id, onDone), 800); }
+  if (j.status === 'error') return fail(p, j.error);
+  setProgress(p, 'Done', 1);
+  $(p === 'gen' ? 'go' : 'check-go').disabled = false;
+  history.replaceState(null, '', '#' + (p === 'check' ? 'check:' : '') + id);
+  onDone(id, j.result);
+}
+
+function drawTimeline(canvas, res, bands = []) {
+  if (!res) return;
+  const dpr = window.devicePixelRatio || 1, W = canvas.clientWidth, H = canvas.clientHeight;
+  if (!W) return;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const g = canvas.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+  const { t, score } = res.timeline, D = res.duration || t[t.length - 1] || 1;
+  const lo = Math.min(...score), hi = Math.max(...score);
+  const x = s => s / D * W, y = v => H - 18 - (v - lo) / (hi - lo || 1) * (H - 30);
+  for (const b of bands) {
+    g.fillStyle = 'rgba(255,77,141,.2)'; g.fillRect(x(b.start), 0, Math.max(3, x(b.end) - x(b.start)), H - 16);
+    g.fillStyle = '#ff4d8d'; g.font = '700 11px Inter, system-ui'; g.fillText('#' + b.index, x(b.start) + 3, 12);
+  }
+  const grad = g.createLinearGradient(0, 0, W, 0); grad.addColorStop(0, '#ff4d8d'); grad.addColorStop(1, '#ffb547');
+  g.beginPath(); t.forEach((s, i) => i ? g.lineTo(x(s), y(score[i])) : g.moveTo(x(s), y(score[i])));
+  g.strokeStyle = grad; g.lineWidth = 2; g.lineJoin = 'round'; g.stroke();
+  g.lineTo(x(t[t.length - 1]), H - 16); g.lineTo(x(t[0]), H - 16); g.closePath();
+  const fill = g.createLinearGradient(0, 0, 0, H); fill.addColorStop(0, 'rgba(255,77,141,.18)'); fill.addColorStop(1, 'rgba(255,77,141,0)');
+  g.fillStyle = fill; g.fill();
+  g.fillStyle = cssVar('--cf-axis'); g.font = '11px Inter, system-ui';
+  g.fillText('0:00', 0, H - 2); const e = fmt(D); g.fillText(e, W - g.measureText(e).width, H - 2);
+}
+
+/* ------------------------------ Generate ------------------------------ */
+let genRes = null, genId = null;
+$('gen-form').addEventListener('submit', async e => {
   e.preventDefault();
   const url = $('url').value.trim();
   if (!url) return $('url').focus();
   $('go').disabled = true;
-  $('results').style.display = 'none';
-  $('status').style.display = 'block';
-  setProgress('Starting…', 0);
+  $('gen-results').classList.add('d-none');
+  $('gen-status').classList.remove('d-none');
+  setProgress('gen', 'Starting…', 0);
   const r = await fetch('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, count: +$('count').value, min_len: +$('min').value, max_len: +$('max').value, mode: $('mode').value, cam_frac: +$('cam').value, captions: $('caps').checked }) });
+    body: JSON.stringify({ url, count: +$('count').value, min_len: +$('min').value, max_len: +$('max').value,
+      mode: $('mode').value, cam_frac: +$('cam').value, captions: $('caps').checked, virality: $('vir').checked }) });
   const j = await r.json();
-  if (!r.ok) return fail(j.error);
-  poll(j.id);
+  if (!r.ok) return fail('gen', j.error);
+  poll('gen', j.id, showGen);
 });
+$('mode').addEventListener('change', () => $('camwrap').classList.toggle('d-none', $('mode').value !== 'facecam'));
 
-function setProgress(msg, frac) {
-  $('msg').textContent = msg; $('msg').className = '';
-  $('pct').textContent = Math.round(frac * 100) + '%';
-  $('fill').style.width = (frac * 100) + '%';
-}
-function fail(msg) {
-  $('msg').textContent = 'Error: ' + msg; $('msg').className = 'err';
-  $('go').disabled = false;
+function showGen(id, res) {
+  genRes = res; genId = id;
+  $('gen-results').classList.remove('d-none');
+  $('gen-title').textContent = res.title;
+  const ranked = res.clips.some(c => c.virality && c.virality.score !== undefined);
+  $('gen-meta').innerHTML = [
+    `<span class="chip"><i class="bi bi-clock"></i> ${fmt(res.duration)}</span>`,
+    `<span class="chip"><i class="bi bi-film"></i> ${res.clips.length} clips</span>`,
+    ranked ? `<span class="chip pink"><i class="bi bi-graph-up-arrow"></i> Ranked by virality${res.used_llm ? ' + Claude' : ''}</span>` : '',
+    res.used_heatmap ? `<span class="chip violet"><i class="bi bi-fire"></i> YouTube most-replayed</span>` : '',
+  ].join('');
+  $('gen-grid').innerHTML = res.clips.map(c => clipCard(id, c)).join('');
+  drawTimeline($('gen-chart'), res, res.clips);
 }
 
-async function poll(id) {
-  const j = await (await fetch('/api/jobs/' + id)).json();
-  if (j.status === 'running') { setProgress(j.message, j.progress); return setTimeout(() => poll(id), 800); }
-  if (j.status === 'error') return fail(j.error);
-  setProgress('Done', 1);
-  $('go').disabled = false;
-  history.replaceState(null, '', '#' + id);   // shareable link back to these results
-  show(id, j.result);
-}
-if (location.hash.length > 1) { $('status').style.display = 'block'; poll(location.hash.slice(1)); }
-
-function show(id, res) {
-  lastResult = res; lastJob = id;
-  $('results').style.display = 'block';
-  $('title').textContent = res.title;
-  $('meta').textContent = `${fmt(res.duration)} long · ${res.clips.length} clips found` +
-    (res.used_heatmap ? ' · used YouTube “most replayed” data' : '');
-  $('grid').innerHTML = res.clips.map(c => `
-    <div class="clip" id="clip-${c.index}">
-      <video src="/clips/${id}/${encodeURIComponent(c.file)}" controls playsinline preload="metadata"></video>
-      <div class="info">
-        <span class="badge">${c.reason}</span>
-        ${c.layout ? `<span class="badge lay">${({facecam:'Webcam detected', crop:'No webcam · center crop', blur:'Fit + blur'})[c.layout] || c.layout}</span>` : ''}
-        ${c.caption ? `<div class="cap">“${c.caption.replace(/</g,'&lt;')}”</div>` : ''}
-        <div class="t">#${c.index} · ${fmt(c.start)} – ${fmt(c.end)} · ${c.length.toFixed(1)}s</div>
-        <a href="/clips/${id}/${encodeURIComponent(c.file)}?dl=1">Download</a>
+function clipCard(id, c) {
+  const v = c.virality || {}, src = `/clips/${id}/${encodeURIComponent(c.file)}`;
+  const layout = { facecam: ['green', 'person-video', 'Webcam detected'], crop: ['', 'crop', 'Center crop'], blur: ['', 'aspect-ratio', 'Fit + blur'] }[c.layout];
+  return `<div class="col"><div class="clip-card h-100 d-flex flex-column" id="clip-${c.index}">
+    <div class="position-relative">
+      <span class="rank">#${c.index}</span>
+      <div class="ratio" style="--bs-aspect-ratio: 177.78%"><video src="${src}" controls playsinline preload="metadata"></video></div>
+    </div>
+    <div class="p-3 d-flex flex-column gap-2 flex-grow-1">
+      ${v.score !== undefined ? `<div class="d-flex gap-3 align-items-center">${ring(v, 58, 5)}
+        <div class="small"><div class="fw-semibold">${VERDICT[v.grade] || ''}</div>
+        <div class="text-secondary">~${v.hold_rate}% predicted hold · peak ${v.peak_time}s</div></div></div>` : ''}
+      ${v.title ? `<div class="fw-bold">${esc(v.title)}</div>` : ''}
+      ${v.reasoning ? `<div class="small text-secondary">${esc(v.reasoning)}</div>` : ''}
+      <div class="d-flex flex-wrap gap-1">
+        <span class="chip pink"><i class="bi bi-lightning-charge"></i> ${esc(c.reason)}</span>
+        ${layout ? `<span class="chip ${layout[0]}"><i class="bi bi-${layout[1]}"></i> ${layout[2]}</span>` : ''}
+        ${v.hook_type && v.hook_type !== 'none' ? `<span class="chip violet">${esc(v.hook_type)} hook</span>` : ''}
       </div>
-    </div>`).join('');
-  drawChart();
+      ${v.score !== undefined ? `<div class="bars">${bars(v)}</div>` : ''}
+      ${c.caption ? `<div class="quote">“${esc(c.caption)}”</div>` : ''}
+      ${v.tips && v.tips.length ? `<ul class="tips">${v.tips.map(t => `<li><i class="bi bi-arrow-up-right-circle"></i>${esc(t)}</li>`).join('')}</ul>` : ''}
+      <div class="mt-auto d-flex justify-content-between align-items-center pt-2">
+        <span class="small text-secondary">${fmt(c.start)} – ${fmt(c.end)} · ${c.length.toFixed(1)}s</span>
+        <a class="btn btn-sm btn-ghost rounded-pill px-3" href="${src}?dl=1"><i class="bi bi-download me-1"></i>Download</a>
+      </div>
+    </div></div></div>`;
 }
-
-function drawChart() {
-  const res = lastResult; if (!res) return;
-  const cv = $('chart'), dpr = window.devicePixelRatio || 1;
-  const W = cv.clientWidth, H = cv.clientHeight;
-  cv.width = W * dpr; cv.height = H * dpr;
-  const g = cv.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
-  const { t, score } = res.timeline, D = res.duration || t[t.length - 1];
-  const lo = Math.min(...score), hi = Math.max(...score);
-  const x = s => s / D * W, y = v => H - 18 - (v - lo) / (hi - lo || 1) * (H - 28);
-
-  for (const c of res.clips) {   // clip bands
-    g.fillStyle = 'rgba(255,61,110,.22)'; g.fillRect(x(c.start), 0, Math.max(3, x(c.end) - x(c.start)), H - 16);
-    g.fillStyle = '#ff3d6e'; g.font = '600 11px system-ui'; g.fillText('#' + c.index, x(c.start) + 2, 12);
-  }
-  g.beginPath(); t.forEach((s, i) => i ? g.lineTo(x(s), y(score[i])) : g.moveTo(x(s), y(score[i])));
-  g.strokeStyle = '#ffb020'; g.lineWidth = 1.5; g.stroke();
-  g.fillStyle = '#8a90a2'; g.font = '11px system-ui';
-  g.fillText('0:00', 0, H - 3); const e = fmt(D); g.fillText(e, W - g.measureText(e).width, H - 3);
-}
-$('chart').addEventListener('click', ev => {
-  if (!lastResult) return;
-  const r = ev.target.getBoundingClientRect(), s = (ev.clientX - r.left) / r.width * lastResult.duration;
-  const c = lastResult.clips.find(c => s >= c.start - 5 && s <= c.end + 5);
+$('gen-chart').addEventListener('click', ev => {
+  if (!genRes) return;
+  const r = ev.target.getBoundingClientRect(), s = (ev.clientX - r.left) / r.width * genRes.duration;
+  const c = genRes.clips.find(c => s >= c.start - 5 && s <= c.end + 5);
   if (!c) return;
   const el = $('clip-' + c.index); el.scrollIntoView({ behavior: 'smooth' });
-  el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200);
+  el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1300);
   el.querySelector('video').play();
 });
-addEventListener('resize', drawChart);
-$('mode').addEventListener('change', () => $('camwrap').style.display = $('mode').value === 'facecam' ? '' : 'none');
+
+/* ------------------------------ Check ------------------------------ */
+let checkRes = null, pickedFile = null;
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); });
+$('file').addEventListener('change', e => { if (e.target.files[0]) pick(e.target.files[0]); });
+function pick(f) {
+  pickedFile = f; $('check-url').value = '';
+  $('drop-text').innerHTML = `<i class="bi bi-file-earmark-play me-1"></i>${esc(f.name)} <span class="text-secondary">(${(f.size / 1048576).toFixed(1)} MB)</span>`;
+}
+$('check-url').addEventListener('input', () => { if ($('check-url').value) { pickedFile = null; $('file').value = '';
+  $('drop-text').textContent = 'Drop a TikTok, Short or Reel here'; } });
+
+$('check-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const url = $('check-url').value.trim();
+  if (!pickedFile && !url) return fail('check', 'Choose a video file or paste a link first');
+  $('check-go').disabled = true;
+  $('check-results').classList.add('d-none');
+  $('check-status').classList.remove('d-none');
+  setProgress('check', pickedFile ? 'Uploading…' : 'Starting…', 0);
+  const fd = new FormData();
+  if (pickedFile) fd.append('file', pickedFile); else fd.append('url', url);
+  let r, j;
+  try { r = await fetch('/api/check', { method: 'POST', body: fd }); j = await r.json(); }
+  catch { return fail('check', 'Upload failed. Is the server still running?'); }
+  if (!r.ok) return fail('check', j.error);
+  poll('check', j.id, showCheck);
+});
+
+function showCheck(id, res) {
+  checkRes = res;
+  const v = res.virality;
+  $('check-results').classList.remove('d-none');
+  $('check-video').src = res.file ? `/clips/${id}/${encodeURIComponent(res.file).replace(/%2F/g, '/')}` : '';
+  $('check-file-meta').textContent = `${res.video.width}×${res.video.height} · ${res.duration.toFixed(1)}s`;
+  $('check-ring').innerHTML = ring(v, 120, 10);
+  $('check-verdict').innerHTML = `<span class="grade-${v.grade}">${VERDICT[v.grade]}</span>`;
+  $('check-sub').innerHTML = [
+    `<span class="chip"><i class="bi bi-hourglass-split"></i> ~${v.hold_rate}% predicted hold</span>`,
+    `<span class="chip"><i class="bi bi-lightning-charge"></i> Peak at ${v.peak_time}s</span>`,
+    v.hook_type && v.hook_type !== 'none' ? `<span class="chip violet">${esc(v.hook_type)} hook</span>` : '',
+    `<span class="chip ${v.used_llm ? 'pink' : ''}"><i class="bi bi-${v.used_llm ? 'stars' : 'cpu'}"></i> ${v.used_llm ? 'Signals + Claude rubric' : 'Signal-based score'}</span>`,
+  ].join('');
+  $('check-claude').innerHTML = v.title || v.reasoning
+    ? `${v.title ? `<div class="fw-bold">Suggested caption: “${esc(v.title)}”</div>` : ''}${v.reasoning ? `<div class="small text-secondary">${esc(v.reasoning)}</div>` : ''}` : '';
+  $('check-bars').innerHTML = bars(v);
+  const icon = { pass: 'check-circle-fill text-success', warn: 'exclamation-circle-fill text-warning', fail: 'x-circle-fill text-danger' };
+  $('check-list').innerHTML = res.checks.map(c => `<div class="check-item"><i class="bi bi-${icon[c.status]}"></i>
+    <div><div class="fw-semibold small">${esc(c.label)}</div><div class="small text-secondary">${esc(c.detail)}</div></div></div>`).join('');
+  $('check-tips').innerHTML = v.tips.length ? v.tips.map(t => `<li><i class="bi bi-arrow-up-right-circle"></i>${esc(t)}</li>`).join('')
+    : '<li class="text-success"><i class="bi bi-check2-circle text-success"></i>Nothing major to fix. Post it.</li>';
+  $('check-transcript').textContent = res.transcript || '(no speech detected)';
+  drawTimeline($('check-chart'), res);
+}
+
+/* ------------------------------ Theme ------------------------------ */
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-bs-theme', t);
+  document.querySelectorAll('.theme-toggle button').forEach(b => b.classList.toggle('active', b.dataset.theme === t));
+  try { localStorage.setItem('cf-theme', t); } catch (e) {}
+  // canvases and score rings bake colours in, so redraw them for the new theme
+  drawTimeline($('gen-chart'), genRes, genRes ? genRes.clips : []); drawTimeline($('check-chart'), checkRes);
+  if (genRes) $('gen-grid').innerHTML = genRes.clips.map(c => clipCard(genId, c)).join('');
+  if (checkRes) $('check-ring').innerHTML = ring(checkRes.virality, 120, 10);
+}
+document.querySelectorAll('.theme-toggle button').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.theme)));
+document.querySelectorAll('.theme-toggle button').forEach(b =>
+  b.classList.toggle('active', b.dataset.theme === document.documentElement.getAttribute('data-bs-theme')));
+
+/* ------------------------------ Shared ------------------------------ */
+addEventListener('resize', () => { drawTimeline($('gen-chart'), genRes, genRes ? genRes.clips : []); drawTimeline($('check-chart'), checkRes); });
+document.querySelectorAll('[data-bs-toggle="pill"]').forEach(b => b.addEventListener('shown.bs.tab', () => {
+  drawTimeline($('gen-chart'), genRes, genRes ? genRes.clips : []); drawTimeline($('check-chart'), checkRes);
+}));
+// reopen results from the link: #<job> (generate) or #check:<job>
+(function restore() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (!h) return;
+  if (h.startsWith('check:')) {
+    bootstrap.Tab.getOrCreateInstance($('tab-check')).show();
+    $('check-status').classList.remove('d-none'); poll('check', h.slice(6), showCheck);
+  } else { $('gen-status').classList.remove('d-none'); poll('gen', h, showGen); }
+})();
 </script>
 </body>
 </html>

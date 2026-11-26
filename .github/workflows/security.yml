@@ -1,0 +1,32 @@
+name: Security
+
+# Known-vulnerability (CVE) scan of every pinned dependency in uv.lock.
+# Runs on each push/PR, every Monday, and on demand. A failure here means a
+# dependency has a published advisory: GitHub emails the repo owner about
+# failed scheduled runs, and Dependabot alerts (repo Settings → Code security)
+# flag the same advisories in the Security tab.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 13 * * 1" # Mondays 13:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    name: Dependency CVE scan (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Export locked dependencies
+        run: uv export --frozen --format requirements-txt --no-hashes --no-emit-project -o requirements-lock.txt
+      - name: Audit against the PyPI / OSV advisory databases
+        run: uvx pip-audit -r requirements-lock.txt --disable-pip --no-deps --progress-spinner off --desc
