@@ -11,6 +11,8 @@ Pipeline
   3. score      – each signal is turned into a "how unusual is this vs. the
                   surrounding minute" z-score, weighted, smoothed
   4. select     – top N peaks, spaced apart, each expanded to 10–15 s
+  4b. virality – 3x candidates scored on hook / hold / emotion / share / loop
+                  (+ optional Claude rubric), top N kept (see virality.py)
   5. render     – downloads just that section in HD, finds the streamer's
                   webcam (a face that stays put), and stacks cam-on-top /
                   gameplay-below at 1080x1920 (or crop / blur fallback)
@@ -292,6 +294,7 @@ class Clip:
     file: str = ""
     layout: str = ""
     caption: str = ""
+    virality: dict = field(default_factory=dict)
 
     @property
     def length(self) -> float:
@@ -497,7 +500,9 @@ def render(src: Source, clips: list[Clip], outdir: Path, mode: str = "facecam",
         if captions:
             import captions as cap
             progress(f"Transcribing speech for clip {c.index}/{len(clips)}", frac)
-            words = cap.transcribe(FFMPEG, inp, ss, c.length)
+            words = getattr(c, "_words", None)
+            if words is None:
+                words = cap.transcribe(FFMPEG, inp, ss, c.length)
             c.caption = " ".join(w.text for w in words)
             # webcam layout: sit on the seam between cam and gameplay;
             # otherwise lower-middle, clear of the TikTok/Reels UI at the bottom
@@ -528,19 +533,76 @@ def render(src: Source, clips: list[Clip], outdir: Path, mode: str = "facecam",
 
 
 # --------------------------------------------------------------------------
+# 6. Virality scoring (see virality.py)
+# --------------------------------------------------------------------------
+def _snap_to_speech(words, start: float, end: float, min_len: float, max_len: float):
+    """Don't open or close a clip mid-word. `words` are absolute-time Word objects."""
+    for w in words:                                   # word straddling the start
+        if w.start < start < w.end and start - w.start <= 1.5:
+            start = max(0.0, w.start - 0.1)
+            break
+    for w in words:                                   # word straddling the end
+        if w.start < end < w.end:
+            end = w.end + 0.25 if (w.end + 0.25 - start) <= max_len + 1.0 else w.start - 0.05
+            break
+    if end - start < min_len:
+        end = start + min_len
+    return round(start, 2), round(end, 2)
+
+
+def rank_by_virality(src: Source, scores: dict, cands: list[Clip], count: int,
+                     min_len: float, max_len: float, progress: Progress = _noop) -> list[Clip]:
+    """Score every candidate (Higgsfield-style signals + SupoClip-style Claude rubric)
+    and keep the `count` most viral, best first."""
+    import captions as cap
+    import virality as vir
+
+    local = {}
+    for n, c in enumerate(cands):
+        progress(f"Scoring virality: candidate {n + 1}/{len(cands)}", 0.76 + 0.03 * n / len(cands))
+        # transcribe a padded window so clip edges can snap to whole words
+        w0 = max(0.0, c.start - 2.0)
+        words = [cap.Word(w.text, w.start + w0, w.end + w0)
+                 for w in cap.transcribe(FFMPEG, src.path, w0, c.length + 4.0)]
+        c.start, c.end = _snap_to_speech(words, c.start, min(src.duration, c.end), min_len, max_len)
+        c.end = min(c.end, src.duration)
+        rel = [cap.Word(w.text, w.start - c.start, w.end - c.start)
+               for w in words if w.start >= c.start - 0.05 and w.end <= c.end + 0.05]
+        c._words = rel
+        local[n] = vir.local_metrics(scores, c.start, c.end, rel)
+
+    progress("Ranking candidates with Claude", 0.79)
+    items = [{"id": n, "transcript": " ".join(w.text for w in c._words) or "(no speech)",
+              "length_s": round(c.length, 1), "peak_at_s": local[n].peak_time,
+              "hook": local[n].hook, "hold": local[n].hold, "emotion": local[n].emotion,
+              "loop": local[n].loop} for n, c in enumerate(cands)]
+    rubric = vir.llm_rank(src.title, items) or {}
+
+    for n, c in enumerate(cands):
+        c.virality = vir.finalize(local[n], rubric.get(n)).to_dict()
+    best = sorted(cands, key=lambda c: c.virality["score"], reverse=True)[:count]
+    for rank, c in enumerate(best, 1):
+        c.index = rank
+    return best
+
+
+# --------------------------------------------------------------------------
 # Orchestration
 # --------------------------------------------------------------------------
 def run(url_or_path: str, outdir: Path, count: int = 5, min_len: float = 10, max_len: float = 15,
         mode: str = "facecam", progress: Progress = _noop, cam_frac: float = 0.35,
-        captions: bool = True) -> dict:
+        captions: bool = True, virality: bool = True) -> dict:
     src = fetch(url_or_path, outdir / "_download", progress)
     progress("Analyzing audio and video", 0.30)
     sig = analyze(src, progress)
     progress("Scoring moments", 0.76)
     scores = score(sig)
-    clips = select(scores, src.duration, count, min_len, max_len)
+    # with virality on, over-generate candidates and keep the most viral ones
+    clips = select(scores, src.duration, count * 3 if virality else count, min_len, max_len)
     if not clips:
         raise RuntimeError("No stand-out moments found – try a longer or livelier video.")
+    if virality:
+        clips = rank_by_virality(src, scores, clips, count, min_len, max_len, progress)
     render(src, clips, outdir, mode, progress, cam_frac=cam_frac, captions=captions)
 
     # downsample the timeline for the UI chart (~600 points)
@@ -549,6 +611,7 @@ def run(url_or_path: str, outdir: Path, count: int = 5, min_len: float = 10, max
         "title": src.title,
         "duration": src.duration,
         "used_heatmap": bool(src.heatmap),
+        "used_llm": any(c.virality.get("used_llm") for c in clips),
         "timeline": {
             "t": [round(float(x), 1) for x in sig.t[::step]],
             "score": [round(float(x), 2) for x in scores["total"][::step]],
@@ -571,8 +634,14 @@ if __name__ == "__main__":
                     help="facecam = webcam stacked on top when one is detected (falls back to crop)")
     ap.add_argument("--cam", type=float, default=0.35, help="share of the height for the webcam (0.25-0.5)")
     ap.add_argument("--no-captions", action="store_true", help="skip Whisper auto-captions")
+    ap.add_argument("--no-virality", action="store_true", help="skip virality scoring / ranking")
     a = ap.parse_args()
     res = run(a.source, Path(a.out), a.count, a.min_len, a.max_len, a.mode, cam_frac=a.cam,
-              captions=not a.no_captions)
+              captions=not a.no_captions, virality=not a.no_virality)
     for c in res["clips"]:
+        v = c.get("virality") or {}
+        if v:
+            print(f"   virality {v['score']:2d} ({v['grade']})  hook {v['hook']} hold {v['hold']} "
+                  f"emotion {v['emotion']} share {v['share']} loop {v['loop']}  "
+                  f"hold-rate ~{v['hold_rate']}%  {v.get('title','')}")
         print(f"#{c['index']}  {c['start']:7.1f}s → {c['end']:7.1f}s  score {c['score']:5.2f}  {c['reason']:26s}  [{c['layout']}]  {c['file']}")

@@ -4,3 +4,4 @@ flask
 imageio-ffmpeg
 opencv-python-headless
 faster-whisper
+anthropic

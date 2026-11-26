@@ -20,6 +20,7 @@ FONT = "Arial Black"
 FONTS_DIR = "/System/Library/Fonts/Supplemental"   # macOS; fontconfig falls back elsewhere
 HIGHLIGHT = "&H0000E6FF&"     # ASS colours are &HBBGGRR& -> warm yellow
 _model = None
+_PHANTOM = re.compile(r"(you|thank you\.?|thanks for watching!?|bye\.?|\.+|music|\[music\]|subtitles by.*)[.!]?")
 
 
 @dataclass
@@ -50,9 +51,12 @@ def transcribe(ffmpeg: str, video: Path, start: float, length: float) -> list[Wo
                                       condition_on_previous_text=False)
     words = []
     for s in segs:
+        # Whisper "hears" phantom phrases in music/noise ("you", "thank you")
+        if _PHANTOM.fullmatch(s.text.strip().lower()) and (s.no_speech_prob > 0.2 or s.avg_logprob < -0.6):
+            continue
         for w in s.words or []:
             t = w.word.strip()
-            if t:
+            if t and w.probability >= 0.3:
                 words.append(Word(t, max(0.0, w.start), min(length, w.end)))
     return words
 
