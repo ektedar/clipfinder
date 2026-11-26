@@ -1,4 +1,5 @@
 """Local web UI for the auto-clipper.  Run:  python app.py  → http://localhost:5050"""
+
 from __future__ import annotations
 
 import threading
@@ -15,13 +16,19 @@ ROOT = Path(__file__).parent
 JOBS_DIR = ROOT / "jobs"
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
 app = Flask(__name__, static_folder=None)
-app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024      # 500 MB uploads
+app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500 MB uploads
 jobs: dict[str, dict] = {}
 
 
 def _start(target, *args) -> str:
     job_id = uuid.uuid4().hex[:10]
-    jobs[job_id] = dict(id=job_id, status="running", progress=0.0, message="Starting", created=time.time())
+    jobs[job_id] = {
+        "id": job_id,
+        "status": "running",
+        "progress": 0.0,
+        "message": "Starting",
+        "created": time.time(),
+    }
     threading.Thread(target=target, args=(job_id, *args), daemon=True).start()
     return job_id
 
@@ -34,10 +41,16 @@ def _work(job_id: str, params: dict) -> None:
 
     try:
         job["result"] = clipper.run(
-            params["url"], JOBS_DIR / job_id,
-            count=params["count"], min_len=params["min_len"], max_len=params["max_len"],
-            mode=params["mode"], progress=progress, cam_frac=params["cam_frac"],
-            captions=params["captions"], virality=params["virality"],
+            params["url"],
+            JOBS_DIR / job_id,
+            count=params["count"],
+            min_len=params["min_len"],
+            max_len=params["max_len"],
+            mode=params["mode"],
+            progress=progress,
+            cam_frac=params["cam_frac"],
+            captions=params["captions"],
+            virality=params["virality"],
         )
         job["status"] = "done"
     except Exception as e:  # surface any failure to the UI
@@ -52,12 +65,16 @@ def create_job():
         return jsonify(error="Paste a YouTube or Twitch link"), 400
     min_len = float(d.get("min_len", 10))
     max_len = max(min_len, float(d.get("max_len", 15)))
-    params = dict(url=url, count=max(1, min(int(d.get("count", 5)), 15)),
-                  min_len=min_len, max_len=max_len,
-                  mode=d.get("mode") if d.get("mode") in ("facecam", "crop", "blur") else "facecam",
-                  cam_frac=min(0.5, max(0.25, float(d.get("cam_frac", 0.35)))),
-                  captions=bool(d.get("captions", True)),
-                  virality=bool(d.get("virality", True)))
+    params = {
+        "url": url,
+        "count": max(1, min(int(d.get("count", 5)), 15)),
+        "min_len": min_len,
+        "max_len": max_len,
+        "mode": d.get("mode") if d.get("mode") in ("facecam", "crop", "blur") else "facecam",
+        "cam_frac": min(0.5, max(0.25, float(d.get("cam_frac", 0.35)))),
+        "captions": bool(d.get("captions", True)),
+        "virality": bool(d.get("virality", True)),
+    }
     return jsonify(id=_start(_work, params))
 
 
@@ -86,7 +103,13 @@ def create_check():
         dest = JOBS_DIR / job_id / f"upload{ext}"
         dest.parent.mkdir(parents=True, exist_ok=True)
         f.save(dest)
-        jobs[job_id] = dict(id=job_id, status="running", progress=0.0, message="Starting", created=time.time())
+        jobs[job_id] = {
+            "id": job_id,
+            "status": "running",
+            "progress": 0.0,
+            "message": "Starting",
+            "created": time.time(),
+        }
         threading.Thread(target=_check_work, args=(job_id, str(dest)), daemon=True).start()
         return jsonify(id=job_id)
     url = (request.form.get("url") or (request.get_json(silent=True) or {}).get("url") or "").strip()
@@ -106,15 +129,20 @@ def get_job(job_id: str):
     saved = JOBS_DIR / job_id / "result.json"
     if job is None and saved.is_file():  # finished in an earlier server run
         import json
-        job = dict(id=job_id, status="done", progress=1.0, message="Done",
-                   result=json.loads(saved.read_text()))
+
+        job = {
+            "id": job_id,
+            "status": "done",
+            "progress": 1.0,
+            "message": "Done",
+            "result": json.loads(saved.read_text()),
+        }
     return (jsonify(job), 200) if job else (jsonify(error="not found"), 404)
 
 
 @app.get("/clips/<job_id>/<path:name>")
 def clip_file(job_id: str, name: str):
-    return send_from_directory(JOBS_DIR / job_id, name,
-                               as_attachment=request.args.get("dl") == "1")
+    return send_from_directory(JOBS_DIR / job_id, name, as_attachment=request.args.get("dl") == "1")
 
 
 @app.get("/")

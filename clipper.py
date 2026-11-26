@@ -19,6 +19,7 @@ Pipeline
 
 CLI:  python clipper.py <url-or-file> [--count 5] [--mode crop|blur]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,12 +28,12 @@ import os
 import re
 import subprocess
 import tempfile
-from dataclasses import dataclass, asdict, field
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
 
-import numpy as np
 import imageio_ffmpeg
+import numpy as np
 
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 # yt-dlp only recognises a binary literally named "ffmpeg", so expose the
@@ -43,14 +44,14 @@ if not (_FFDIR / "ffmpeg").exists():
     (_FFDIR / "ffmpeg").symlink_to(FFMPEG)
 # yt-dlp's partial-download check ignores ffmpeg_location and only searches PATH
 os.environ["PATH"] = str(_FFDIR) + os.pathsep + os.environ.get("PATH", "")
-BIN = 0.5          # seconds per analysis bin
-SR = 8000          # audio sample rate used for analysis
+BIN = 0.5  # seconds per analysis bin
+SR = 8000  # audio sample rate used for analysis
 
-Progress = Callable[[str, float], None]   # (message, fraction 0..1)
+Progress = Callable[[str, float], None]  # (message, fraction 0..1)
 
 
 def _noop(msg: str, frac: float) -> None:
-    print(f"[{frac*100:5.1f}%] {msg}")
+    print(f"[{frac * 100:5.1f}%] {msg}")
 
 
 # --------------------------------------------------------------------------
@@ -58,23 +59,32 @@ def _noop(msg: str, frac: float) -> None:
 # --------------------------------------------------------------------------
 @dataclass
 class Source:
-    path: Path                  # file used for analysis (low-res copy for URLs)
+    path: Path  # file used for analysis (low-res copy for URLs)
     title: str
     duration: float
-    heatmap: list = field(default_factory=list)   # YouTube "most replayed"
-    url: str = ""               # set for online sources -> clips fetched in HD
+    heatmap: list = field(default_factory=list)  # YouTube "most replayed"
+    url: str = ""  # set for online sources -> clips fetched in HD
 
 
-HD_FORMAT = "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b"
+HD_FORMAT = (
+    "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]/b"
+)
 # Analysis only needs rough audio + motion, so grab a small copy. This turns a
 # multi-GB 3-hour 1080p60 stream into a few hundred MB and decodes ~10x faster.
 LOW_FORMAT = "b[height<=360][height>=160]/bv*[height<=360]+ba/w"
 
 
 def _ydl_opts(fmt: str, outtmpl: str, hook=None) -> dict:
-    o = {"format": fmt, "merge_output_format": "mp4", "outtmpl": outtmpl,
-         "ffmpeg_location": str(_FFDIR), "quiet": True, "no_warnings": True, "noprogress": True,
-         "concurrent_fragment_downloads": 8}
+    o = {
+        "format": fmt,
+        "merge_output_format": "mp4",
+        "outtmpl": outtmpl,
+        "ffmpeg_location": str(_FFDIR),
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+        "concurrent_fragment_downloads": 8,
+    }
     if hook:
         o["progress_hooks"] = [hook]
     return o
@@ -95,7 +105,7 @@ def fetch(url_or_path: str, workdir: Path, progress: Progress = _noop) -> Source
         total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
         if total:
             frac = d.get("downloaded_bytes", 0) / total
-        elif d.get("fragment_count"):                      # HLS (Twitch)
+        elif d.get("fragment_count"):  # HLS (Twitch)
             frac = (d.get("fragment_index") or 0) / d["fragment_count"]
         else:
             return
@@ -107,8 +117,13 @@ def fetch(url_or_path: str, workdir: Path, progress: Progress = _noop) -> Source
         meta = json.loads(cache.read_text())
         if meta.get("source") == url_or_path and Path(meta["path"]).exists():
             progress("Using cached download", 0.30)
-            return Source(path=Path(meta["path"]), title=meta["title"], duration=meta["duration"],
-                          heatmap=meta["heatmap"], url=meta["url"])
+            return Source(
+                path=Path(meta["path"]),
+                title=meta["title"],
+                duration=meta["duration"],
+                heatmap=meta["heatmap"],
+                url=meta["url"],
+            )
 
     progress("Fetching video info", 0.01)
     with yt_dlp.YoutubeDL(_ydl_opts(LOW_FORMAT, str(workdir / "analysis.%(ext)s"), hook)) as ydl:
@@ -124,8 +139,18 @@ def fetch(url_or_path: str, workdir: Path, progress: Progress = _noop) -> Source
         heatmap=info.get("heatmap") or [],
         url=info.get("webpage_url") or url_or_path,
     )
-    cache.write_text(json.dumps({"source": url_or_path, "path": str(path), "title": src.title,
-                                 "duration": src.duration, "heatmap": src.heatmap, "url": src.url}))
+    cache.write_text(
+        json.dumps(
+            {
+                "source": url_or_path,
+                "path": str(path),
+                "title": src.title,
+                "duration": src.duration,
+                "heatmap": src.heatmap,
+                "url": src.url,
+            }
+        )
+    )
     return src
 
 
@@ -158,10 +183,10 @@ def _probe_duration(path: Path) -> float:
 # --------------------------------------------------------------------------
 @dataclass
 class Signals:
-    t: np.ndarray          # bin start times
-    loudness: np.ndarray   # dBFS per bin
-    motion: np.ndarray     # 0..1 mean frame-difference per bin
-    heat: np.ndarray       # 0..1 YouTube replay heat (zeros if absent)
+    t: np.ndarray  # bin start times
+    loudness: np.ndarray  # dBFS per bin
+    motion: np.ndarray  # 0..1 mean frame-difference per bin
+    heat: np.ndarray  # 0..1 YouTube replay heat (zeros if absent)
 
 
 def analyze(src: Source, progress: Progress = _noop) -> Signals:
@@ -170,15 +195,32 @@ def analyze(src: Source, progress: Progress = _noop) -> Signals:
     hop = int(SR * BIN)
 
     cmd = [
-        FFMPEG, "-hide_banner", "-nostats", "-loglevel", "error",
-        "-i", str(src.path),
+        FFMPEG,
+        "-hide_banner",
+        "-nostats",
+        "-loglevel",
+        "error",
+        "-i",
+        str(src.path),
         # audio: mono 8 kHz raw PCM to stdout
-        "-map", "0:a:0", "-ac", "1", "-ar", str(SR), "-f", "s16le", "pipe:1",
+        "-map",
+        "0:a:0",
+        "-ac",
+        "1",
+        "-ar",
+        str(SR),
+        "-f",
+        "s16le",
+        "pipe:1",
         # video: 4 fps, tiny, scene-change score per frame written to a file
-        "-map", "0:v:0", "-an",
-        "-vf", f"fps=4,scale=160:-2,select='gte(scene,0)',"
-               f"metadata=print:key=lavfi.scene_score:file={scene_file}",
-        "-f", "null", "-",
+        "-map",
+        "0:v:0",
+        "-an",
+        "-vf",
+        f"fps=4,scale=160:-2,select='gte(scene,0)',metadata=print:key=lavfi.scene_score:file={scene_file}",
+        "-f",
+        "null",
+        "-",
     ]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     total_bins = max(1, int(src.duration / BIN))
@@ -192,11 +234,13 @@ def analyze(src: Source, progress: Progress = _noop) -> Signals:
         n = len(buf) // (hop * 2)
         if n:
             a = np.frombuffer(buf[: n * hop * 2], dtype=np.int16).astype(np.float32) / 32768.0
-            buf = buf[n * hop * 2:]
+            buf = buf[n * hop * 2 :]
             rms = np.sqrt(np.mean(a.reshape(n, hop) ** 2, axis=1) + 1e-10)
             loud.extend(20 * np.log10(rms + 1e-6))
-            progress("Listening for hype moments + watching for action",
-                     0.30 + 0.45 * min(1.0, len(loud) / total_bins))
+            progress(
+                "Listening for hype moments + watching for action",
+                0.30 + 0.45 * min(1.0, len(loud) / total_bins),
+            )
     err = proc.stderr.read().decode(errors="ignore")
     proc.wait()
     if proc.returncode != 0 and not loud:
@@ -248,14 +292,14 @@ def _local_z(x: np.ndarray, win_s: float = 90.0) -> np.ndarray:
     mu = _moving(x, w)
     sd = np.sqrt(np.maximum(_moving((x - mu) ** 2, w), 1e-6))
     gsd = np.std(x) + 1e-6
-    return (x - mu) / np.maximum(sd, 0.35 * gsd)   # floor sd so flat parts don't explode
+    return (x - mu) / np.maximum(sd, 0.35 * gsd)  # floor sd so flat parts don't explode
 
 
 WEIGHTS = {"audio": 1.0, "burst": 0.5, "motion": 0.6, "heat": 0.7}
 
 
 def score(sig: Signals) -> dict[str, np.ndarray]:
-    loud = np.maximum(sig.loudness, -70.0)          # treat silence as -70 dB
+    loud = np.maximum(sig.loudness, -70.0)  # treat silence as -70 dB
     audio = np.clip(_local_z(loud), -2, 4)
     # burst: sudden jumps in loudness (a shout after calm talk)
     rise = np.maximum(0, loud - _moving(loud, int(4 / BIN)))
@@ -268,7 +312,7 @@ def score(sig: Signals) -> dict[str, np.ndarray]:
 
     parts = {"audio": audio, "burst": burst, "motion": motion, "heat": heat_z}
     total = sum(WEIGHTS[k] * v for k, v in parts.items())
-    total = _moving(total, int(3 / BIN))            # 3 s smoothing -> moments, not blips
+    total = _moving(total, int(3 / BIN))  # 3 s smoothing -> moments, not blips
     return {"total": total, **{k: _moving(v, int(3 / BIN)) for k, v in parts.items()}}
 
 
@@ -301,21 +345,26 @@ class Clip:
         return self.end - self.start
 
 
-def select(scores: dict[str, np.ndarray], duration: float, count: int = 5,
-           min_len: float = 10.0, max_len: float = 15.0) -> list[Clip]:
+def select(
+    scores: dict[str, np.ndarray],
+    duration: float,
+    count: int = 5,
+    min_len: float = 10.0,
+    max_len: float = 15.0,
+) -> list[Clip]:
     total = scores["total"].copy()
     nb = len(total)
     # don't clip the very first/last seconds (intros, end screens)
     head = int(min(8.0, duration * 0.03) / BIN)
-    tail = int(min(30.0, duration * 0.04) / BIN)       # skip outros / end cards
+    tail = int(min(30.0, duration * 0.04) / BIN)  # skip outros / end cards
     total[:head] = -np.inf
-    total[max(0, nb - tail):] = -np.inf
+    total[max(0, nb - tail) :] = -np.inf
 
     clips: list[Clip] = []
     avail = total.copy()
     for _ in range(count):
         i = int(np.argmax(avail))
-        if not np.isfinite(avail[i]) or avail[i] < 0.3:   # nothing exciting left
+        if not np.isfinite(avail[i]) or avail[i] < 0.3:  # nothing exciting left
             break
         peak_val = total[i]
 
@@ -334,14 +383,21 @@ def select(scores: dict[str, np.ndarray], duration: float, count: int = 5,
         end = min(duration, start + length)
 
         dominant = max(REASONS, key=lambda k: WEIGHTS[k] * scores[k][i])
-        clips.append(Clip(index=0, start=round(start, 2), end=round(end, 2),
-                          peak=round(i * BIN, 2), score=round(float(peak_val), 2),
-                          reason=REASONS[dominant]))
+        clips.append(
+            Clip(
+                index=0,
+                start=round(start, 2),
+                end=round(end, 2),
+                peak=round(i * BIN, 2),
+                score=round(float(peak_val), 2),
+                reason=REASONS[dominant],
+            )
+        )
 
         # suppress neighbourhood so clips don't overlap
         # spread clips across the video rather than bunching on one segment
         gap = int(max(max_len + 5, duration / (count * 3)) / BIN)
-        avail[max(0, i - gap): i + gap] = -np.inf
+        avail[max(0, i - gap) : i + gap] = -np.inf
 
     clips.sort(key=lambda c: c.start)
     for n, c in enumerate(clips, 1):
@@ -366,15 +422,16 @@ def find_webcam(video: Path, start: float, length: float, samples: int = 12):
     import cv2
 
     cap = cv2.VideoCapture(str(video))
-    W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)); H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     if not YUNET.exists() or not W:
         cap.release()
         return None, (W, H)
     scale = 640 / W
-    dw, dh = 640, int(round(H * scale))
+    dw, dh = 640, round(H * scale)
     det = cv2.FaceDetectorYN.create(str(YUNET), "", (dw, dh), 0.7)
 
-    dets = []   # (frame_idx, cx, cy, w, h) in source pixels
+    dets = []  # (frame_idx, cx, cy, w, h) in source pixels
     used = 0
     for k in range(samples):
         cap.set(cv2.CAP_PROP_POS_MSEC, 1000 * (start + length * (k + 0.5) / samples))
@@ -383,7 +440,7 @@ def find_webcam(video: Path, start: float, length: float, samples: int = 12):
             continue
         used += 1
         _, faces = det.detect(cv2.resize(frame, (dw, dh)))
-        for f in (faces if faces is not None else []):
+        for f in faces if faces is not None else []:
             x, y, w, h = (float(v) / scale for v in f[:4])
             dets.append((k, x + w / 2, y + h / 2, w, h))
     cap.release()
@@ -394,14 +451,18 @@ def find_webcam(video: Path, start: float, length: float, samples: int = 12):
     clusters: list[list] = []
     for d in dets:
         for cl in clusters:
-            mx = np.median([e[1] for e in cl]); my = np.median([e[2] for e in cl])
+            mx = np.median([e[1] for e in cl])
+            my = np.median([e[2] for e in cl])
             mw = np.median([e[3] for e in cl])
             if abs(d[1] - mx) < 0.6 * mw and abs(d[2] - my) < 0.6 * mw:
-                cl.append(d); break
+                cl.append(d)
+                break
         else:
             clusters.append([d])
 
-    def frames(cl): return len({e[0] for e in cl})
+    def frames(cl):
+        return len({e[0] for e in cl})
+
     stable = [cl for cl in clusters if frames(cl) >= max(2, 0.4 * used)]
     if not stable:
         return None, (W, H)
@@ -418,7 +479,7 @@ OUT_W, OUT_H = 1080, 1920
 
 
 def _even(v: float) -> int:
-    return max(2, int(round(v / 2)) * 2)
+    return max(2, round(v / 2) * 2)
 
 
 def _facecam_graph(face, W: int, H: int, cam_frac: float) -> str:
@@ -433,7 +494,7 @@ def _facecam_graph(face, W: int, H: int, cam_frac: float) -> str:
     ch = cw / aspect
     if ch > H:
         ch, cw = H, H * aspect
-    cx, cy = fx + fw / 2, fy + fh * 0.35          # headroom above, shoulders below
+    cx, cy = fx + fw / 2, fy + fh * 0.35  # headroom above, shoulders below
     x0 = min(max(0, cx - cw / 2), W - cw)
     y0 = min(max(0, cy - ch / 2), H - ch)
 
@@ -465,9 +526,16 @@ def _filter(mode: str) -> tuple[str, str]:
     return "-vf", "crop='min(iw,ih*9/16)':'min(ih,iw*16/9)',scale=1080:1920,setsar=1"
 
 
-def render(src: Source, clips: list[Clip], outdir: Path, mode: str = "facecam",
-           progress: Progress = _noop, cam_frac: float = 0.35,
-           fallback: str = "crop", captions: bool = True) -> list[Clip]:
+def render(
+    src: Source,
+    clips: list[Clip],
+    outdir: Path,
+    mode: str = "facecam",
+    progress: Progress = _noop,
+    cam_frac: float = 0.35,
+    fallback: str = "crop",
+    captions: bool = True,
+) -> list[Clip]:
     """mode: 'facecam' (cam on top if one is found, else `fallback`), 'crop' or 'blur'."""
     outdir.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix="clipper_ass_"))  # no spaces -> safe in filtergraph
@@ -499,6 +567,7 @@ def render(src: Source, clips: list[Clip], outdir: Path, mode: str = "facecam",
         c.caption = ""
         if captions:
             import captions as cap
+
             progress(f"Transcribing speech for clip {c.index}/{len(clips)}", frac)
             words = getattr(c, "_words", None)
             if words is None:
@@ -511,18 +580,48 @@ def render(src: Source, clips: list[Clip], outdir: Path, mode: str = "facecam",
             if ass:
                 if flag == "-vf":
                     graph += "," + cap.ass_filter(ass)
-                else:                                   # graph ends with "[v]"
+                else:  # graph ends with "[v]"
                     graph = graph[:-3] + "," + cap.ass_filter(ass) + "[v]"
 
         progress(f"Rendering clip {c.index}/{len(clips)}", frac)
-        cmd = [FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-               "-ss", f"{ss:.2f}", "-i", str(inp), "-t", f"{c.length:.2f}",
-               flag, graph]
+        cmd = [
+            FFMPEG,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-ss",
+            f"{ss:.2f}",
+            "-i",
+            str(inp),
+            "-t",
+            f"{c.length:.2f}",
+            flag,
+            graph,
+        ]
         if flag == "-filter_complex":
             cmd += ["-map", "[v]", "-map", "0:a:0?"]
-        cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-                "-r", "30", "-c:a", "aac", "-b:a", "160k", "-ar", "44100",
-                "-movflags", "+faststart", str(out)]
+        cmd += [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "20",
+            "-pix_fmt",
+            "yuv420p",
+            "-r",
+            "30",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-ar",
+            "44100",
+            "-movflags",
+            "+faststart",
+            str(out),
+        ]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
             raise RuntimeError(f"Render failed for clip {c.index}: {r.stderr[-500:]}")
@@ -537,11 +636,11 @@ def render(src: Source, clips: list[Clip], outdir: Path, mode: str = "facecam",
 # --------------------------------------------------------------------------
 def _snap_to_speech(words, start: float, end: float, min_len: float, max_len: float):
     """Don't open or close a clip mid-word. `words` are absolute-time Word objects."""
-    for w in words:                                   # word straddling the start
+    for w in words:  # word straddling the start
         if w.start < start < w.end and start - w.start <= 1.5:
             start = max(0.0, w.start - 0.1)
             break
-    for w in words:                                   # word straddling the end
+    for w in words:  # word straddling the end
         if w.start < end < w.end:
             end = w.end + 0.25 if (w.end + 0.25 - start) <= max_len + 1.0 else w.start - 0.05
             break
@@ -550,8 +649,15 @@ def _snap_to_speech(words, start: float, end: float, min_len: float, max_len: fl
     return round(start, 2), round(end, 2)
 
 
-def rank_by_virality(src: Source, scores: dict, cands: list[Clip], count: int,
-                     min_len: float, max_len: float, progress: Progress = _noop) -> list[Clip]:
+def rank_by_virality(
+    src: Source,
+    scores: dict,
+    cands: list[Clip],
+    count: int,
+    min_len: float,
+    max_len: float,
+    progress: Progress = _noop,
+) -> list[Clip]:
     """Score every candidate (Higgsfield-style signals + SupoClip-style Claude rubric)
     and keep the `count` most viral, best first."""
     import captions as cap
@@ -562,20 +668,34 @@ def rank_by_virality(src: Source, scores: dict, cands: list[Clip], count: int,
         progress(f"Scoring virality: candidate {n + 1}/{len(cands)}", 0.76 + 0.03 * n / len(cands))
         # transcribe a padded window so clip edges can snap to whole words
         w0 = max(0.0, c.start - 2.0)
-        words = [cap.Word(w.text, w.start + w0, w.end + w0)
-                 for w in cap.transcribe(FFMPEG, src.path, w0, c.length + 4.0)]
+        words = [
+            cap.Word(w.text, w.start + w0, w.end + w0)
+            for w in cap.transcribe(FFMPEG, src.path, w0, c.length + 4.0)
+        ]
         c.start, c.end = _snap_to_speech(words, c.start, min(src.duration, c.end), min_len, max_len)
         c.end = min(c.end, src.duration)
-        rel = [cap.Word(w.text, w.start - c.start, w.end - c.start)
-               for w in words if w.start >= c.start - 0.05 and w.end <= c.end + 0.05]
+        rel = [
+            cap.Word(w.text, w.start - c.start, w.end - c.start)
+            for w in words
+            if w.start >= c.start - 0.05 and w.end <= c.end + 0.05
+        ]
         c._words = rel
         local[n] = vir.local_metrics(scores, c.start, c.end, rel)
 
     progress("Ranking candidates with Claude", 0.79)
-    items = [{"id": n, "transcript": " ".join(w.text for w in c._words) or "(no speech)",
-              "length_s": round(c.length, 1), "peak_at_s": local[n].peak_time,
-              "hook": local[n].hook, "hold": local[n].hold, "emotion": local[n].emotion,
-              "loop": local[n].loop} for n, c in enumerate(cands)]
+    items = [
+        {
+            "id": n,
+            "transcript": " ".join(w.text for w in c._words) or "(no speech)",
+            "length_s": round(c.length, 1),
+            "peak_at_s": local[n].peak_time,
+            "hook": local[n].hook,
+            "hold": local[n].hold,
+            "emotion": local[n].emotion,
+            "loop": local[n].loop,
+        }
+        for n, c in enumerate(cands)
+    ]
     rubric = vir.llm_rank(src.title, items) or {}
 
     for n, c in enumerate(cands):
@@ -589,9 +709,18 @@ def rank_by_virality(src: Source, scores: dict, cands: list[Clip], count: int,
 # --------------------------------------------------------------------------
 # Orchestration
 # --------------------------------------------------------------------------
-def run(url_or_path: str, outdir: Path, count: int = 5, min_len: float = 10, max_len: float = 15,
-        mode: str = "facecam", progress: Progress = _noop, cam_frac: float = 0.35,
-        captions: bool = True, virality: bool = True) -> dict:
+def run(
+    url_or_path: str,
+    outdir: Path,
+    count: int = 5,
+    min_len: float = 10,
+    max_len: float = 15,
+    mode: str = "facecam",
+    progress: Progress = _noop,
+    cam_frac: float = 0.35,
+    captions: bool = True,
+    virality: bool = True,
+) -> dict:
     src = fetch(url_or_path, outdir / "_download", progress)
     progress("Analyzing audio and video", 0.30)
     sig = analyze(src, progress)
@@ -630,18 +759,35 @@ if __name__ == "__main__":
     ap.add_argument("--count", type=int, default=5)
     ap.add_argument("--min", type=float, default=10.0, dest="min_len")
     ap.add_argument("--max", type=float, default=15.0, dest="max_len")
-    ap.add_argument("--mode", choices=["facecam", "crop", "blur"], default="facecam",
-                    help="facecam = webcam stacked on top when one is detected (falls back to crop)")
+    ap.add_argument(
+        "--mode",
+        choices=["facecam", "crop", "blur"],
+        default="facecam",
+        help="facecam = webcam stacked on top when one is detected (falls back to crop)",
+    )
     ap.add_argument("--cam", type=float, default=0.35, help="share of the height for the webcam (0.25-0.5)")
     ap.add_argument("--no-captions", action="store_true", help="skip Whisper auto-captions")
     ap.add_argument("--no-virality", action="store_true", help="skip virality scoring / ranking")
     a = ap.parse_args()
-    res = run(a.source, Path(a.out), a.count, a.min_len, a.max_len, a.mode, cam_frac=a.cam,
-              captions=not a.no_captions, virality=not a.no_virality)
+    res = run(
+        a.source,
+        Path(a.out),
+        a.count,
+        a.min_len,
+        a.max_len,
+        a.mode,
+        cam_frac=a.cam,
+        captions=not a.no_captions,
+        virality=not a.no_virality,
+    )
     for c in res["clips"]:
         v = c.get("virality") or {}
         if v:
-            print(f"   virality {v['score']:2d} ({v['grade']})  hook {v['hook']} hold {v['hold']} "
-                  f"emotion {v['emotion']} share {v['share']} loop {v['loop']}  "
-                  f"hold-rate ~{v['hold_rate']}%  {v.get('title','')}")
-        print(f"#{c['index']}  {c['start']:7.1f}s → {c['end']:7.1f}s  score {c['score']:5.2f}  {c['reason']:26s}  [{c['layout']}]  {c['file']}")
+            print(
+                f"   virality {v['score']:2d} ({v['grade']})  hook {v['hook']} hold {v['hold']} "
+                f"emotion {v['emotion']} share {v['share']} loop {v['loop']}  "
+                f"hold-rate ~{v['hold_rate']}%  {v.get('title', '')}"
+            )
+        print(
+            f"#{c['index']}  {c['start']:7.1f}s → {c['end']:7.1f}s  score {c['score']:5.2f}  {c['reason']:26s}  [{c['layout']}]  {c['file']}"
+        )

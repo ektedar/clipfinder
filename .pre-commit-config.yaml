@@ -18,7 +18,7 @@ repos:
 
   # --- Lint + format ------------------------------------------------------
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.17.6 # keep in sync with the ruff version in uv.lock
     hooks:
       - id: ruff
       - id: ruff-format

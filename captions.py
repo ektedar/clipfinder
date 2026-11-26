@@ -6,6 +6,7 @@ and turn it into TikTok-style burned-in subtitles (.ass for ffmpeg/libass):
   * the word being spoken is highlighted
   * each new phrase "pops" in
 """
+
 from __future__ import annotations
 
 import re
@@ -15,10 +16,10 @@ from pathlib import Path
 
 import numpy as np
 
-MODEL_NAME = "small"          # "base" is ~2x faster, slightly less accurate
+MODEL_NAME = "small"  # "base" is ~2x faster, slightly less accurate
 FONT = "Arial Black"
-FONTS_DIR = "/System/Library/Fonts/Supplemental"   # macOS; fontconfig falls back elsewhere
-HIGHLIGHT = "&H0000E6FF&"     # ASS colours are &HBBGGRR& -> warm yellow
+FONTS_DIR = "/System/Library/Fonts/Supplemental"  # macOS; fontconfig falls back elsewhere
+HIGHLIGHT = "&H0000E6FF&"  # ASS colours are &HBBGGRR& -> warm yellow
 _model = None
 # Whisper "hallucinates" on music, game audio and silence: it was trained on a lot
 # of YouTube subtitles, so with no clear speech it tends to output stock phrases
@@ -27,7 +28,9 @@ _model = None
 # its *whole* text is one of these phrases AND Whisper itself was unsure (high
 # no-speech probability or low confidence), so a streamer really saying
 # "thank you" mid-sentence is kept.
-_PHANTOM = re.compile(r"(you|thank you\.?|thanks for watching!?|bye\.?|\.+|music|\[music\]|subtitles by.*)[.!]?")
+_PHANTOM = re.compile(
+    r"(you|thank you\.?|thanks for watching!?|bye\.?|\.+|music|\[music\]|subtitles by.*)[.!]?"
+)
 
 
 @dataclass
@@ -41,6 +44,7 @@ def _get_model():
     global _model
     if _model is None:
         from faster_whisper import WhisperModel
+
         _model = WhisperModel(MODEL_NAME, device="cpu", compute_type="int8")
     return _model
 
@@ -48,14 +52,34 @@ def _get_model():
 def transcribe(ffmpeg: str, video: Path, start: float, length: float) -> list[Word]:
     """Speech in video[start:start+length] -> words with times relative to `start`."""
     pcm = subprocess.run(
-        [ffmpeg, "-hide_banner", "-loglevel", "error", "-ss", f"{start:.2f}", "-i", str(video),
-         "-t", f"{length:.2f}", "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],
-        capture_output=True).stdout
+        [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            f"{start:.2f}",
+            "-i",
+            str(video),
+            "-t",
+            f"{length:.2f}",
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-f",
+            "f32le",
+            "-",
+        ],
+        capture_output=True,
+    ).stdout
     audio = np.frombuffer(pcm, np.float32)
     if audio.size < 16000 * 0.5:
         return []
-    segs, _ = _get_model().transcribe(audio, word_timestamps=True, vad_filter=True,
-                                      condition_on_previous_text=False)
+    segs, _ = _get_model().transcribe(
+        audio, word_timestamps=True, vad_filter=True, condition_on_previous_text=False
+    )
     words = []
     for s in segs:
         # Whisper "hears" phantom phrases in music/noise ("you", "thank you")
@@ -72,11 +96,14 @@ def _chunks(words: list[Word], max_words: int = 3, max_chars: int = 18) -> list[
     """Group words into short phrases, breaking on pauses and punctuation."""
     out, cur = [], []
     for w in words:
-        if cur and (len(cur) >= max_words
-                    or sum(len(x.text) + 1 for x in cur) + len(w.text) > max_chars
-                    or w.start - cur[-1].end > 0.6
-                    or re.search(r"[.!?,]$", cur[-1].text)):
-            out.append(cur); cur = []
+        if cur and (
+            len(cur) >= max_words
+            or sum(len(x.text) + 1 for x in cur) + len(w.text) > max_chars
+            or w.start - cur[-1].end > 0.6
+            or re.search(r"[.!?,]$", cur[-1].text)
+        ):
+            out.append(cur)
+            cur = []
         cur.append(w)
     if cur:
         out.append(cur)
@@ -84,7 +111,7 @@ def _chunks(words: list[Word], max_words: int = 3, max_chars: int = 18) -> list[
 
 
 def _ts(t: float) -> str:
-    cs = int(round(t * 100))
+    cs = round(t * 100)
     return f"{cs // 360000}:{cs // 6000 % 60:02d}:{cs // 100 % 60:02d}.{cs % 100:02d}"
 
 
@@ -92,8 +119,9 @@ def _clean(s: str) -> str:
     return s.upper().replace("{", "(").replace("}", ")").replace("\\", "")
 
 
-def build_ass(words: list[Word], out: Path, y: int, width: int = 1080, height: int = 1920,
-              font_size: int = 84) -> Path | None:
+def build_ass(
+    words: list[Word], out: Path, y: int, width: int = 1080, height: int = 1920, font_size: int = 84
+) -> Path | None:
     """Write an .ass subtitle file; captions are centred horizontally at height y."""
     if not words:
         return None
@@ -121,11 +149,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             e = ch[wi + 1].start if wi + 1 < len(ch) else chunk_end
             if e - s < 0.05:
                 continue
-            parts = [(f"{{\\c{HIGHLIGHT}}}{_clean(x.text)}{{\\c&H00FFFFFF&}}" if j == wi else _clean(x.text))
-                     for j, x in enumerate(ch)]
+            parts = [
+                (f"{{\\c{HIGHLIGHT}}}{_clean(x.text)}{{\\c&H00FFFFFF&}}" if j == wi else _clean(x.text))
+                for j, x in enumerate(ch)
+            ]
             pop = "\\fscx112\\fscy112\\t(0,90,\\fscx100\\fscy100)" if wi == 0 else ""
-            lines.append(f"Dialogue: 0,{_ts(s)},{_ts(e)},Cap,,0,0,0,,{{\\pos({width // 2},{y}){pop}}}"
-                         + " ".join(parts))
+            lines.append(
+                f"Dialogue: 0,{_ts(s)},{_ts(e)},Cap,,0,0,0,,{{\\pos({width // 2},{y}){pop}}}"
+                + " ".join(parts)
+            )
     out.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
     return out
 
