@@ -48,6 +48,12 @@ uv add <pkg>  /  uv add --dev <pkg>   # add a dependency (updates pyproject.toml
 - The README images live in `docs/`. The demo media comes from *Big Buck Bunny* (CC BY 3.0); keep the credit
   line if you replace them.
 
+## Releases
+
+Pushing to `main` triggers `.github/workflows/release.yml`, which bumps the version, tags it and publishes a
+GitHub Release. Write Conventional Commit messages (`feat:`, `fix:`, `docs:`, `feat!:` for breaking changes),
+because they decide the bump size. Don't hand-edit `version` in `pyproject.toml`.
+
 ## Safety
 
 - Never commit secrets. `ANTHROPIC_API_KEY` belongs in the environment or a git-ignored `.env.*` file.

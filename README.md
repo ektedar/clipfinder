@@ -158,6 +158,20 @@ Keep secrets such as `ANTHROPIC_API_KEY` in your shell environment or in a `.env
   **Dependabot alerts** and **Dependabot security updates** under *Settings → Code security* to get alerted
   and receive a fix PR as soon as a CVE is published.
 
+### 🏷️ Releases
+
+Every push to `main` cuts a release automatically (`.github/workflows/release.yml`). It bumps the version in
+`pyproject.toml`, tags `vX.Y.Z`, and publishes a GitHub Release with generated notes. The bump size comes
+from [Conventional Commit](https://www.conventionalcommits.org) messages:
+
+| Commit message | Bump |
+| --- | --- |
+| `feat!: …` or `BREAKING CHANGE:` in the body | major: `1.2.3 → 2.0.0` |
+| `feat: …` / `feat(ui): …` | minor: `1.2.3 → 1.3.0` |
+| anything else (`fix:`, `docs:`, …) | patch: `1.2.3 → 1.2.4` |
+
+To pick the bump yourself, run it from *Actions → Release → Run workflow*.
+
 ### Project layout
 
 | Path | What it is |
